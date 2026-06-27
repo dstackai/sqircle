@@ -1,0 +1,55 @@
+{
+  "name": "@dstackai/sqircle",
+  "version": "0.1.1",
+  "description": "React components for precise isometric squircle-prism SVG compositions.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dstackai/sqircle.git"
+  },
+  "homepage": "https://github.com/dstackai/sqircle#readme",
+  "bugs": {
+    "url": "https://github.com/dstackai/sqircle/issues"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "docs/react",
+    "docs/design",
+    "docs/examples"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/sqircle.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "types": "./dist/index.d.ts",
+  "module": "./dist/sqircle.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run typecheck && npm run build:lib",
+    "build:demo": "tsc --noEmit && vite build",
+    "build:lib": "vite build --config vite.lib.config.ts && npm run build:types",
+    "build:types": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}

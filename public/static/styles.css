@@ -1,0 +1,883 @@
+:root {
+  --page-text: #0f141a;
+  --caption: #656871;
+  --panel: rgba(255, 255, 255, 0.8);
+  --panel-border: #e9ebed;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: transparent;
+  color: var(--page-text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.page-shell {
+  width: min(100%, 1180px);
+  margin-inline: auto;
+  padding: clamp(18px, 4vw, 54px);
+}
+
+.mode-radio,
+.variant-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mode-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(104px, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #dfe7f2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.mode-switch label {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  border-radius: 6px;
+  color: #596171;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  transition:
+    background-color 220ms ease,
+    color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+#mode-transparent:focus-visible ~ .mode-row label[for="mode-transparent"],
+#mode-wireframe:focus-visible ~ .mode-row label[for="mode-wireframe"] {
+  outline: 2px solid #0099ff;
+  outline-offset: 2px;
+}
+
+#mode-transparent:checked ~ .mode-row label[for="mode-transparent"],
+#mode-wireframe:checked ~ .mode-row label[for="mode-wireframe"] {
+  color: #152234;
+  background: #ffffff;
+  box-shadow: 0 1px 5px rgba(15, 20, 26, 0.11);
+}
+
+.hero-card,
+.variant-card {
+  --top-fill: url("#top-15");
+  --side-fill: url("#side-15");
+  --gpu-surface-fill: url("#gpu-surface-15");
+  --active-left: #0099ff;
+  --active-right: #962eff;
+  --active-side: #7f6ff5;
+  --active-corner: #6f7ff0;
+  --ghost-top: #9ba9d6;
+  --ghost-left: #6f91d0;
+  --ghost-right: #8065ca;
+  --ghost-side: #94a5d7;
+  --ghost-corner: #8f9fd5;
+  --active-alpha: 1;
+  --ghost-alpha: 0.34;
+  --ghost-fill-opacity: 1;
+  --ghost-hidden-opacity: 0;
+  --ghost-stroke-width: 0;
+  --label-fill: #24105e;
+  --label-wire-width: 1.1;
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+  --face-edge-opacity: 0.72;
+  --face-edge-width: 0.35;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(184, 231, 255, 0.14), rgba(255, 255, 255, 0) 52%),
+    var(--panel);
+}
+
+.hero-card {
+  display: grid;
+  grid-template-columns: minmax(280px, 780px) minmax(120px, 1fr);
+  align-items: center;
+  gap: clamp(14px, 4vw, 48px);
+  padding: clamp(14px, 3vw, 28px);
+}
+
+.hero-squircle,
+.mini-squircle {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.hero-squircle {
+  aspect-ratio: 800 / 480;
+}
+
+.mini-squircle {
+  aspect-ratio: 800 / 480;
+}
+
+.hero-copy p {
+  margin: 0;
+  color: #424650;
+  font-size: clamp(20px, 2.2vw, 30px);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.variant-title {
+  display: none;
+}
+
+#variant-13:checked ~ .hero-card .title-13,
+#variant-14:checked ~ .hero-card .title-14,
+#variant-15:checked ~ .hero-card .title-15,
+#variant-16:checked ~ .hero-card .title-16,
+#variant-17:checked ~ .hero-card .title-17,
+#variant-18:checked ~ .hero-card .title-18,
+#variant-19:checked ~ .hero-card .title-19,
+#variant-20:checked ~ .hero-card .title-20 {
+  display: inline;
+}
+
+#variant-13:checked ~ .hero-card,
+#variant-13:checked ~ .single-drawer {
+  --top-fill: url("#top-13");
+  --side-fill: url("#side-13");
+  --gpu-surface-fill: url("#gpu-surface-13");
+  --label-fill: #2a1060;
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+}
+
+#variant-14:checked ~ .hero-card,
+#variant-14:checked ~ .single-drawer {
+  --top-fill: url("#top-14");
+  --side-fill: url("#side-14");
+  --gpu-surface-fill: url("#gpu-surface-14");
+  --label-fill: #063f6a;
+  --top-edge: #237aa8;
+  --side-edge: #063f6a;
+}
+
+#variant-15:checked ~ .hero-card,
+#variant-15:checked ~ .single-drawer {
+  --top-fill: url("#top-15");
+  --side-fill: url("#side-15");
+  --gpu-surface-fill: url("#gpu-surface-15");
+  --label-fill: #f7fbff;
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+}
+
+#variant-16:checked ~ .hero-card,
+#variant-16:checked ~ .single-drawer {
+  --top-fill: url("#top-16");
+  --side-fill: url("#side-16");
+  --gpu-surface-fill: url("#gpu-surface-16");
+  --label-fill: #10246a;
+  --top-edge: #3e65c8;
+  --side-edge: #10246a;
+}
+
+#variant-17:checked ~ .hero-card,
+#variant-17:checked ~ .single-drawer {
+  --top-fill: url("#top-17");
+  --side-fill: url("#side-17");
+  --gpu-surface-fill: url("#gpu-surface-17");
+  --label-fill: #17245e;
+  --top-edge: #5f6ed0;
+  --side-edge: #17245e;
+}
+
+#variant-18:checked ~ .hero-card,
+#variant-18:checked ~ .single-drawer {
+  --top-fill: url("#top-18");
+  --side-fill: url("#side-18");
+  --gpu-surface-fill: url("#gpu-surface-18");
+  --label-fill: #064272;
+  --top-edge: #4f94c0;
+  --side-edge: #064272;
+}
+
+#variant-19:checked ~ .hero-card,
+#variant-19:checked ~ .single-drawer {
+  --top-fill: url("#top-19");
+  --side-fill: url("#side-19");
+  --gpu-surface-fill: url("#gpu-surface-19");
+  --label-fill: #12306f;
+  --top-edge: #6470d8;
+  --side-edge: #12306f;
+}
+
+#variant-20:checked ~ .hero-card,
+#variant-20:checked ~ .single-drawer {
+  --top-fill: url("#top-20");
+  --side-fill: url("#side-20");
+  --gpu-surface-fill: url("#gpu-surface-20");
+  --label-fill: #17245e;
+  --top-edge: #5a7bd0;
+  --side-edge: #17245e;
+}
+
+.face {
+  pointer-events: all;
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+
+.ghost-side {
+  fill: var(--ghost-side-fill, var(--side-fill, var(--ghost-side)));
+  fill-opacity: var(--ghost-fill-opacity, 1);
+  stroke: var(--ghost-side-stroke, var(--side-edge));
+  stroke-opacity: var(--ghost-stroke-opacity, var(--face-edge-opacity));
+  stroke-width: var(--ghost-stroke-width, var(--face-edge-width));
+}
+
+.ghost-top {
+  fill: var(--ghost-top-fill, var(--top-fill));
+  fill-opacity: var(--ghost-fill-opacity, 1);
+  stroke: var(--ghost-top-stroke, var(--top-edge));
+  stroke-opacity: var(--ghost-stroke-opacity, var(--face-edge-opacity));
+  stroke-width: var(--ghost-stroke-width, var(--face-edge-width));
+}
+
+.ghost-hidden {
+  fill: none;
+  opacity: var(--ghost-hidden-opacity, 0);
+  pointer-events: none;
+  stroke: var(--ghost-hidden-stroke, var(--top-fill));
+  stroke-dasharray: 8 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--ghost-hidden-stroke-width, 1.8);
+}
+
+.active-side {
+  fill: var(--active-side-fill, var(--side-fill, var(--active-side)));
+  stroke: var(--side-edge);
+  stroke-opacity: var(--face-edge-opacity);
+  stroke-width: var(--face-edge-width);
+}
+
+.active-top {
+  fill: var(--top-fill);
+  stroke: var(--top-edge);
+  stroke-opacity: var(--face-edge-opacity);
+  stroke-width: var(--face-edge-width);
+}
+
+.top-inlay {
+  fill: none;
+  pointer-events: none;
+  stroke: var(--dash-solid-stroke, var(--label-fill));
+  stroke-dasharray: 9 8;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.plane-label {
+  clip-rule: evenodd;
+  fill: var(--label-fill);
+  fill-rule: evenodd;
+  paint-order: stroke;
+  pointer-events: none;
+  shape-rendering: geometricPrecision;
+  stroke: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0;
+  transition:
+    fill 250ms ease,
+    stroke 250ms ease,
+    stroke-width 250ms ease,
+    opacity 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.wire-inlay {
+  fill: none;
+  opacity: 0;
+  pointer-events: none;
+  stroke: var(--dash-wire-stroke, var(--top-fill));
+  stroke-dasharray: 8 8;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.interactive-layer {
+  cursor: pointer;
+}
+
+.interactive-layer .ghost,
+.interactive-layer .active,
+.layer-inlay,
+.layer-label,
+.layer-inlay-wire {
+  transition: opacity 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.interactive-layer .ghost {
+  opacity: var(--ghost-alpha);
+}
+
+.interactive-layer .active {
+  opacity: 0;
+}
+
+.layer-inlay,
+.layer-label,
+.layer-inlay-wire {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.layer-middle .layer-inlay {
+  opacity: 0.56;
+}
+
+.layer-top .layer-label {
+  opacity: 0.28;
+}
+
+.hero-squircle:not(:hover) .interactive-layer.is-default .ghost {
+  opacity: 0;
+}
+
+.hero-squircle:not(:hover) .interactive-layer.is-default .active {
+  opacity: var(--active-alpha);
+}
+
+.hero-squircle:not(:hover) .interactive-layer.is-default .layer-label {
+  opacity: 0.88;
+}
+
+.hero-squircle:hover .interactive-layer .ghost {
+  opacity: 0.2;
+}
+
+.hero-squircle:hover .interactive-layer .layer-label {
+  opacity: 0.22;
+}
+
+.hero-squircle:hover .interactive-layer:hover .ghost {
+  opacity: 0;
+}
+
+.hero-squircle:hover .interactive-layer:hover .active {
+  opacity: var(--active-alpha);
+}
+
+.hero-squircle:hover .interactive-layer:hover .layer-inlay {
+  opacity: 0.9;
+}
+
+.hero-squircle:hover .interactive-layer:hover .layer-label {
+  opacity: 0.88;
+}
+
+.static-inlay {
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.static-label {
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.static-squircle .ghost {
+  opacity: var(--ghost-alpha);
+}
+
+.static-squircle .top-preview .ghost {
+  opacity: 0;
+}
+
+.static-squircle .active {
+  opacity: var(--active-alpha);
+}
+
+.variant-drawer,
+.single-drawer {
+  margin-top: 16px;
+}
+
+.variant-drawer summary,
+.single-drawer summary {
+  width: max-content;
+  cursor: pointer;
+  color: #424650;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+  list-style-position: outside;
+}
+
+.variant-drawer summary::marker,
+.single-drawer summary::marker {
+  color: #006ce0;
+}
+
+.variant-grid,
+.single-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.single-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.variant-card {
+  --label-wire-width: 1.1;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+  padding: 10px;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.variant-card span {
+  color: var(--caption);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.single-drawer {
+  --top-fill: url("#top-15");
+  --side-fill: url("#side-15");
+  --label-fill: #f7fbff;
+  --label-wire-width: 1.1;
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+  --face-edge-opacity: 0.72;
+  --face-edge-width: 0.35;
+}
+
+.single-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(184, 231, 255, 0.1), rgba(255, 255, 255, 0) 54%),
+    var(--panel);
+}
+
+.single-card span {
+  color: var(--caption);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.single-squircle {
+  display: block;
+  width: 100%;
+  aspect-ratio: 812 / 314;
+  overflow: visible;
+}
+
+.single-active {
+  opacity: var(--active-alpha);
+}
+
+.single-ghost {
+  opacity: 0.38;
+}
+
+.single-inlay {
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.single-label {
+  opacity: 0.88;
+}
+
+.single-transparent .single-label {
+  opacity: 0.62;
+}
+
+.single-transparent .single-inlay {
+  opacity: 0.62;
+}
+
+.single-wire {
+  --ghost-fill-opacity: 0;
+  --ghost-hidden-opacity: 0.28;
+  --ghost-hidden-stroke: var(--top-fill);
+  --ghost-hidden-stroke-width: 1.2;
+  --ghost-stroke-opacity: 1;
+  --ghost-side-fill: transparent;
+  --ghost-side-stroke: var(--top-fill);
+  --ghost-stroke-width: 1.6;
+  --ghost-top-fill: transparent;
+  --ghost-top-stroke: var(--top-fill);
+}
+
+.single-wire .single-ghost {
+  opacity: 0.88;
+}
+
+.single-wire .plane-label {
+  fill: none !important;
+  opacity: 0.88;
+  stroke: var(--top-fill);
+  stroke-width: var(--label-wire-width);
+}
+
+.single-wire .single-wire-inlay {
+  opacity: 0.88;
+}
+
+#variant-13:checked ~ .variant-drawer label[for="variant-13"],
+#variant-14:checked ~ .variant-drawer label[for="variant-14"],
+#variant-15:checked ~ .variant-drawer label[for="variant-15"],
+#variant-16:checked ~ .variant-drawer label[for="variant-16"],
+#variant-17:checked ~ .variant-drawer label[for="variant-17"],
+#variant-18:checked ~ .variant-drawer label[for="variant-18"],
+#variant-19:checked ~ .variant-drawer label[for="variant-19"],
+#variant-20:checked ~ .variant-drawer label[for="variant-20"] {
+  border-color: rgba(0, 153, 255, 0.42);
+  box-shadow: 0 0 0 2px rgba(0, 153, 255, 0.11);
+}
+
+#variant-13:focus-visible ~ .variant-drawer label[for="variant-13"],
+#variant-14:focus-visible ~ .variant-drawer label[for="variant-14"],
+#variant-15:focus-visible ~ .variant-drawer label[for="variant-15"],
+#variant-16:focus-visible ~ .variant-drawer label[for="variant-16"],
+#variant-17:focus-visible ~ .variant-drawer label[for="variant-17"],
+#variant-18:focus-visible ~ .variant-drawer label[for="variant-18"],
+#variant-19:focus-visible ~ .variant-drawer label[for="variant-19"],
+#variant-20:focus-visible ~ .variant-drawer label[for="variant-20"] {
+  outline: 2px solid #0099ff;
+  outline-offset: 2px;
+}
+
+.alpha {
+  --active-alpha: 1;
+  --ghost-alpha: 0.33;
+}
+
+.v13 {
+  --top-fill: url("#top-13");
+  --side-fill: url("#side-13");
+  --label-fill: #2a1060;
+  --gpu-surface-fill: url("#gpu-surface-13");
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+  --active-left: #b388ff;
+  --active-right: #0099ff;
+  --active-side: #758deb;
+  --active-corner: #8793f1;
+  --ghost-top: #aaa2dc;
+  --ghost-left: #907fcf;
+  --ghost-right: #5d8acc;
+  --ghost-side: #9aa9d6;
+  --ghost-corner: #929ed3;
+}
+
+.v14 {
+  --top-fill: url("#top-14");
+  --side-fill: url("#side-14");
+  --label-fill: #063f6a;
+  --gpu-surface-fill: url("#gpu-surface-14");
+  --top-edge: #237aa8;
+  --side-edge: #063f6a;
+  --active-left: #65cad8;
+  --active-right: #006ce0;
+  --active-side: #5da9d2;
+  --active-corner: #5eb6d4;
+  --ghost-top: #a2c5ca;
+  --ghost-left: #7bb2bd;
+  --ghost-right: #5e83bd;
+  --ghost-side: #94b7c5;
+  --ghost-corner: #8aafc1;
+}
+
+.v15 {
+  --top-fill: url("#top-15");
+  --side-fill: url("#side-15");
+  --label-fill: #f7fbff;
+  --gpu-surface-fill: url("#gpu-surface-15");
+  --top-edge: #7c5fd0;
+  --side-edge: #2d1466;
+  --active-left: #0099ff;
+  --active-right: #962eff;
+  --active-side: #7f6ff5;
+  --active-corner: #6f7ff0;
+  --ghost-top: #9ba9d6;
+  --ghost-left: #6f91d0;
+  --ghost-right: #8065ca;
+  --ghost-side: #94a5d7;
+  --ghost-corner: #8f9fd5;
+}
+
+.v16 {
+  --top-fill: url("#top-16");
+  --side-fill: url("#side-16");
+  --label-fill: #10246a;
+  --gpu-surface-fill: url("#gpu-surface-16");
+  --top-edge: #3e65c8;
+  --side-edge: #10246a;
+  --active-left: #75cfff;
+  --active-right: #2d49d8;
+  --active-side: #5d83df;
+  --active-corner: #5f9ee8;
+  --ghost-top: #a2bdd4;
+  --ghost-left: #7dafc8;
+  --ghost-right: #5e70c4;
+  --ghost-side: #9ab3ce;
+  --ghost-corner: #8fa7cc;
+}
+
+.v17 {
+  --top-fill: url("#top-17");
+  --side-fill: url("#side-17");
+  --label-fill: #17245e;
+  --gpu-surface-fill: url("#gpu-surface-17");
+  --top-edge: #5f6ed0;
+  --side-edge: #17245e;
+  --active-left: #7f91ff;
+  --active-right: #0099ff;
+  --active-side: #5f91ec;
+  --active-corner: #6491f3;
+  --ghost-top: #a0aad9;
+  --ghost-left: #7c8ad0;
+  --ghost-right: #618ece;
+  --ghost-side: #99a8d4;
+  --ghost-corner: #8fa3d3;
+}
+
+.v18 {
+  --top-fill: url("#top-18");
+  --side-fill: url("#side-18");
+  --label-fill: #064272;
+  --gpu-surface-fill: url("#gpu-surface-18");
+  --top-edge: #4f94c0;
+  --side-edge: #064272;
+  --active-left: #b8e7ff;
+  --active-right: #006ce0;
+  --active-side: #6aaee0;
+  --active-corner: #76bce8;
+  --ghost-top: #adc5d6;
+  --ghost-left: #92bad0;
+  --ghost-right: #6c91c2;
+  --ghost-side: #a3bed2;
+  --ghost-corner: #98b4cd;
+}
+
+.v19 {
+  --top-fill: url("#top-19");
+  --side-fill: url("#side-19");
+  --label-fill: #12306f;
+  --gpu-surface-fill: url("#gpu-surface-19");
+  --top-edge: #6470d8;
+  --side-edge: #12306f;
+  --active-left: #42b4ff;
+  --active-right: #8575ff;
+  --active-side: #6e8cf0;
+  --active-corner: #6a9ff4;
+  --ghost-top: #a0bfd3;
+  --ghost-left: #71a8cf;
+  --ghost-right: #7479cc;
+  --ghost-side: #9fb6d1;
+  --ghost-corner: #94a9ce;
+}
+
+.v20 {
+  --top-fill: url("#top-20");
+  --side-fill: url("#side-20");
+  --label-fill: #17245e;
+  --gpu-surface-fill: url("#gpu-surface-20");
+  --top-edge: #5a7bd0;
+  --side-edge: #17245e;
+  --active-left: #5c7fff;
+  --active-right: #b8e7ff;
+  --active-side: #70a4f2;
+  --active-corner: #6f95f0;
+  --ghost-top: #a0afd8;
+  --ghost-left: #718bd0;
+  --ghost-right: #74a7d2;
+  --ghost-side: #9aafd4;
+  --ghost-corner: #92a8d2;
+}
+
+#mode-wireframe:checked ~ .hero-card,
+#mode-wireframe:checked ~ .variant-drawer .variant-card {
+  --ghost-alpha: 0.74;
+  --ghost-fill-opacity: 0;
+  --ghost-hidden-opacity: 0.3;
+  --ghost-hidden-stroke: var(--top-fill);
+  --ghost-hidden-stroke-width: 1.2;
+  --ghost-stroke-opacity: 1;
+  --ghost-side-fill: transparent;
+  --ghost-top-fill: transparent;
+  --ghost-side-stroke: var(--top-fill);
+  --ghost-top-stroke: var(--top-fill);
+  --ghost-stroke-width: 1.6;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .interactive-layer .ghost {
+  opacity: 0.58;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .interactive-layer .layer-label {
+  opacity: 0.58;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .interactive-layer:hover .ghost {
+  opacity: 0;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .interactive-layer:hover .layer-label {
+  opacity: 0.88;
+}
+
+#mode-wireframe:checked ~ .hero-card .plane-label,
+#mode-wireframe:checked ~ .variant-drawer .variant-card .plane-label {
+  fill: none !important;
+  stroke: var(--top-fill);
+  stroke-width: var(--label-wire-width);
+}
+
+#mode-wireframe:checked ~ .hero-card .layer-inlay {
+  opacity: 0;
+}
+
+#mode-wireframe:checked ~ .hero-card .layer-middle .layer-inlay-wire {
+  opacity: 0.72;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .interactive-layer:hover .layer-inlay-wire {
+  opacity: 0.78;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .layer-middle:hover .layer-inlay {
+  opacity: 0;
+}
+
+#mode-wireframe:checked ~ .hero-card .hero-squircle:hover .layer-middle:hover .layer-inlay-wire {
+  opacity: 0.88;
+}
+
+#mode-wireframe:checked ~ .variant-drawer .variant-card .static-inlay {
+  opacity: 0;
+}
+
+#mode-wireframe:checked ~ .variant-drawer .variant-card .static-squircle .active {
+  opacity: 0;
+}
+
+#mode-wireframe:checked ~ .variant-drawer .variant-card .static-squircle .top-preview .ghost {
+  opacity: var(--ghost-alpha);
+}
+
+#mode-wireframe:checked ~ .variant-drawer .variant-card .wire-annotation {
+  opacity: 0.88;
+}
+
+#mode-wireframe:checked ~ #variant-13:checked ~ .variant-drawer label[for="variant-13"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-14:checked ~ .variant-drawer label[for="variant-14"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-15:checked ~ .variant-drawer label[for="variant-15"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-16:checked ~ .variant-drawer label[for="variant-16"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-17:checked ~ .variant-drawer label[for="variant-17"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-18:checked ~ .variant-drawer label[for="variant-18"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-19:checked ~ .variant-drawer label[for="variant-19"] .static-squircle .active,
+#mode-wireframe:checked ~ #variant-20:checked ~ .variant-drawer label[for="variant-20"] .static-squircle .active {
+  opacity: var(--active-alpha);
+}
+
+#mode-wireframe:checked ~ #variant-13:checked ~ .variant-drawer label[for="variant-13"] .static-inlay,
+#mode-wireframe:checked ~ #variant-14:checked ~ .variant-drawer label[for="variant-14"] .static-inlay,
+#mode-wireframe:checked ~ #variant-15:checked ~ .variant-drawer label[for="variant-15"] .static-inlay,
+#mode-wireframe:checked ~ #variant-16:checked ~ .variant-drawer label[for="variant-16"] .static-inlay,
+#mode-wireframe:checked ~ #variant-17:checked ~ .variant-drawer label[for="variant-17"] .static-inlay,
+#mode-wireframe:checked ~ #variant-18:checked ~ .variant-drawer label[for="variant-18"] .static-inlay,
+#mode-wireframe:checked ~ #variant-19:checked ~ .variant-drawer label[for="variant-19"] .static-inlay,
+#mode-wireframe:checked ~ #variant-20:checked ~ .variant-drawer label[for="variant-20"] .static-inlay {
+  opacity: 0.88;
+  stroke: var(--top-fill);
+}
+
+#mode-wireframe:checked ~ #variant-13:checked ~ .variant-drawer label[for="variant-13"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-14:checked ~ .variant-drawer label[for="variant-14"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-15:checked ~ .variant-drawer label[for="variant-15"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-16:checked ~ .variant-drawer label[for="variant-16"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-17:checked ~ .variant-drawer label[for="variant-17"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-18:checked ~ .variant-drawer label[for="variant-18"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-19:checked ~ .variant-drawer label[for="variant-19"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-20:checked ~ .variant-drawer label[for="variant-20"] .static-squircle .top-preview .ghost,
+#mode-wireframe:checked ~ #variant-13:checked ~ .variant-drawer label[for="variant-13"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-14:checked ~ .variant-drawer label[for="variant-14"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-15:checked ~ .variant-drawer label[for="variant-15"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-16:checked ~ .variant-drawer label[for="variant-16"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-17:checked ~ .variant-drawer label[for="variant-17"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-18:checked ~ .variant-drawer label[for="variant-18"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-19:checked ~ .variant-drawer label[for="variant-19"] .wire-annotation,
+#mode-wireframe:checked ~ #variant-20:checked ~ .variant-drawer label[for="variant-20"] .wire-annotation {
+  opacity: 0;
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    padding: 14px;
+  }
+
+  .mode-row {
+    justify-content: stretch;
+  }
+
+  .mode-switch {
+    width: 100%;
+  }
+
+  .hero-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy {
+    order: -1;
+  }
+}

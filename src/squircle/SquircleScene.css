@@ -1,0 +1,75 @@
+.squircle-scene {
+  color-scheme: light;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  background: transparent;
+}
+
+.squircle-scene.sq-theme-dark {
+  color-scheme: dark;
+}
+
+.sq-layer {
+  cursor: pointer;
+}
+
+.sq-layer.is-selected {
+  outline: none;
+}
+
+.sq-variant {
+  transition: opacity var(--sq-transition-ms, 220ms) ease;
+}
+
+.sq-hover {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sq-layer.sq-has-hover:hover > .sq-base {
+  opacity: 0;
+}
+
+.sq-layer.sq-has-hover:hover > .sq-hover {
+  opacity: 1;
+}
+
+.sq-face {
+  pointer-events: all;
+  shape-rendering: geometricPrecision;
+  stroke-linejoin: round;
+}
+
+.sq-hidden {
+  fill: none;
+  pointer-events: none;
+  stroke-dasharray: 8 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sq-inlay {
+  fill: none;
+  pointer-events: none;
+  shape-rendering: geometricPrecision;
+  stroke-dasharray: 9 8;
+  stroke-linejoin: round;
+}
+
+.sq-label {
+  clip-rule: evenodd;
+  fill-rule: evenodd;
+  paint-order: stroke;
+  pointer-events: none;
+  shape-rendering: geometricPrecision;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-miterlimit: 1;
+  transition:
+    fill 250ms ease,
+    stroke 250ms ease,
+    stroke-width 250ms ease,
+    opacity 250ms ease;
+}
