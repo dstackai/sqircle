@@ -33,6 +33,7 @@ Expected results:
 
 - No page renders all-black squircles.
 - Solid `fluid` and `frosted` effects are clipped to the top face and animate without moving layer geometry.
+- Solid `fluid` and `frosted` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
 - Geometry stays fixed when selection or hover changes.
 - No hover state changes layer gaps, transforms, scale, shadows, filters, or halos.
 - Wireframe text uses one live SVG `<text>` element with gradient stroke, not duplicated label copies or primitive letter parts.
@@ -56,5 +57,6 @@ Confirm any visual change still follows the design docs:
 - Front-facing side wall uses hidden-surface removal from the sampled superellipse normals.
 - Gradients use `userSpaceOnUse` and palette constants from `src/squircle/palettes.ts`.
 - Effects use the generated top polygon as the clip path.
+- Effects author blob positions, blur, radius, and drift from local `halfSize`/`2 * halfSize`, then project the color field with the label/isometric matrix.
 - Filled faces retain subtle same-family edge strokes.
 - Wireframe, dash, and label stroke widths remain configurable data.

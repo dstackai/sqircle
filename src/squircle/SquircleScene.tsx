@@ -47,32 +47,32 @@ const DEFAULT_TEXT_FONT_WEIGHT = 400;
 const DEFAULT_EFFECT: SquircleEffect = "off";
 
 const FLUID_BASE_BLOBS = [
-  { x: -0.16, y: -0.24, r: 0.48, slot: 0, i: 0, sp: 0.95, ax: 0.3, ay: 0.28, ar: 0.02 },
-  { x: 0.12, y: 0.06, r: 0.49, slot: 1, i: 1, sp: 1.1, ax: 0.32, ay: 0.24, ar: 0.02 },
-  { x: 0.36, y: 0.42, r: 0.47, slot: 2, i: 2, sp: 0.9, ax: 0.28, ay: 0.3, ar: 0.018 },
-  { x: 0.64, y: 0.08, r: 0.48, slot: 3, i: 3, sp: 1.2, ax: 0.31, ay: 0.26, ar: 0.02 },
-  { x: 0.92, y: 0.34, r: 0.46, slot: 4, i: 4, sp: 1.05, ax: 0.29, ay: 0.31, ar: 0.018 },
-  { x: 1.16, y: 0.64, r: 0.48, slot: 2, i: 5, sp: 0.85, ax: 0.33, ay: 0.27, ar: 0.02 },
-  { x: 0.74, y: 1.08, r: 0.47, slot: 1, i: 6, sp: 1.3, ax: 0.3, ay: 0.32, ar: 0.018 },
-  { x: 0.24, y: 1.2, r: 0.48, slot: 3, i: 7, sp: 1.0, ax: 0.32, ay: 0.28, ar: 0.02 }
+  { x: -1.12, y: -1.04, r: 0.48, slot: 0, i: 0, sp: 0.95, ax: 0.23, ay: 0.21, ar: 0.018 },
+  { x: -0.58, y: -0.7, r: 0.49, slot: 1, i: 1, sp: 1.1, ax: 0.24, ay: 0.2, ar: 0.018 },
+  { x: -0.1, y: -0.16, r: 0.47, slot: 2, i: 2, sp: 0.9, ax: 0.22, ay: 0.23, ar: 0.016 },
+  { x: 0.46, y: -0.72, r: 0.48, slot: 3, i: 3, sp: 1.2, ax: 0.23, ay: 0.21, ar: 0.018 },
+  { x: 1.02, y: -0.18, r: 0.46, slot: 4, i: 4, sp: 1.05, ax: 0.22, ay: 0.23, ar: 0.016 },
+  { x: 1.18, y: 0.58, r: 0.48, slot: 2, i: 5, sp: 0.85, ax: 0.24, ay: 0.21, ar: 0.018 },
+  { x: 0.42, y: 1.08, r: 0.47, slot: 1, i: 6, sp: 1.3, ax: 0.23, ay: 0.24, ar: 0.016 },
+  { x: -0.54, y: 1.14, r: 0.48, slot: 3, i: 7, sp: 1.0, ax: 0.24, ay: 0.22, ar: 0.018 }
 ];
 
 const FLUID_LIGHT_BLOBS = [
-  { x: -0.02, y: 0.08, r: 0.48, slot: 0, i: 8, sp: 1.7, ax: 0.34, ay: 0.3, ar: 0.018 },
-  { x: 0.32, y: -0.18, r: 0.47, slot: 1, i: 9, sp: 1.45, ax: 0.32, ay: 0.28, ar: 0.018 },
-  { x: 0.7, y: 0.36, r: 0.49, slot: 0, i: 10, sp: 2.0, ax: 0.3, ay: 0.34, ar: 0.018 },
-  { x: 1.06, y: 0.92, r: 0.47, slot: 1, i: 11, sp: 1.6, ax: 0.34, ay: 0.3, ar: 0.018 }
+  { x: -0.82, y: -0.44, r: 0.48, slot: 0, i: 8, sp: 1.7, ax: 0.25, ay: 0.23, ar: 0.016 },
+  { x: -0.2, y: -1.08, r: 0.47, slot: 1, i: 9, sp: 1.45, ax: 0.24, ay: 0.22, ar: 0.016 },
+  { x: 0.66, y: 0.0, r: 0.49, slot: 0, i: 10, sp: 2.0, ax: 0.23, ay: 0.25, ar: 0.016 },
+  { x: 1.12, y: 0.94, r: 0.47, slot: 1, i: 11, sp: 1.6, ax: 0.25, ay: 0.23, ar: 0.016 }
 ];
 
 const FROSTED_BLOBS = [
-  { x: -0.12, y: -0.12, r: 0.47, slot: 0, i: 12, sp: 0.75, ax: 0.22, ay: 0.2, ar: 0.018 },
-  { x: 0.18, y: 0.16, r: 0.49, slot: 1, i: 13, sp: 0.9, ax: 0.24, ay: 0.22, ar: 0.018 },
-  { x: 0.46, y: 0.46, r: 0.47, slot: 2, i: 14, sp: 0.8, ax: 0.22, ay: 0.24, ar: 0.018 },
-  { x: 0.72, y: 0.12, r: 0.48, slot: 3, i: 15, sp: 1.0, ax: 0.23, ay: 0.2, ar: 0.018 },
-  { x: 1.08, y: 0.44, r: 0.46, slot: 1, i: 16, sp: 0.85, ax: 0.22, ay: 0.23, ar: 0.018 },
-  { x: 0.82, y: 1.1, r: 0.49, slot: 2, i: 17, sp: 0.95, ax: 0.24, ay: 0.21, ar: 0.018 },
-  { x: 0.34, y: 1.18, r: 0.47, slot: 0, i: 18, sp: 0.82, ax: 0.22, ay: 0.24, ar: 0.018 },
-  { x: -0.08, y: 0.76, r: 0.48, slot: 3, i: 19, sp: 1.05, ax: 0.23, ay: 0.22, ar: 0.018 }
+  { x: -1.08, y: -0.96, r: 0.47, slot: 0, i: 12, sp: 0.75, ax: 0.2, ay: 0.19, ar: 0.016 },
+  { x: -0.56, y: -0.46, r: 0.49, slot: 1, i: 13, sp: 0.9, ax: 0.21, ay: 0.2, ar: 0.016 },
+  { x: 0.02, y: 0.02, r: 0.47, slot: 2, i: 14, sp: 0.8, ax: 0.2, ay: 0.21, ar: 0.016 },
+  { x: 0.64, y: -0.6, r: 0.48, slot: 3, i: 15, sp: 1.0, ax: 0.21, ay: 0.19, ar: 0.016 },
+  { x: 1.12, y: 0.2, r: 0.46, slot: 1, i: 16, sp: 0.85, ax: 0.2, ay: 0.21, ar: 0.016 },
+  { x: 0.74, y: 1.08, r: 0.49, slot: 2, i: 17, sp: 0.95, ax: 0.21, ay: 0.2, ar: 0.016 },
+  { x: -0.14, y: 1.16, r: 0.47, slot: 0, i: 18, sp: 0.82, ax: 0.2, ay: 0.21, ar: 0.016 },
+  { x: -1.04, y: 0.58, r: 0.48, slot: 3, i: 19, sp: 1.05, ax: 0.21, ay: 0.2, ar: 0.016 }
 ];
 
 type ResolvedVariant = {
@@ -163,24 +163,48 @@ export function SquircleScene({
 
 function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: ReturnType<typeof createSquircleGeometry> }) {
   const topPoints = pointsToString(geometry.topPoints);
-  const topWidth = geometry.topBounds.maxX - geometry.topBounds.minX;
-  const fluidBlur = roundNumber(topWidth * 0.1);
-  const fluidLightBlur = roundNumber(topWidth * 0.1);
-  const frostedBlur = roundNumber(topWidth * 0.1);
+  const planeWidth = geometry.config.halfSize * 2;
+  const planeBlur = roundNumber(planeWidth * 0.13);
+  const filterExtent = roundNumber(geometry.config.halfSize * 3.6);
+  const filterSize = filterExtent * 2;
 
   return (
     <defs>
       <clipPath id={`${prefix}-top-clip`} clipPathUnits="userSpaceOnUse">
         <polygon points={topPoints} />
       </clipPath>
-      <filter id={`${prefix}-fluid-main-blur`} x="-40%" y="-40%" width="180%" height="180%">
-        <feGaussianBlur stdDeviation={fluidBlur} />
+      <filter
+        id={`${prefix}-fluid-main-blur`}
+        filterUnits="userSpaceOnUse"
+        primitiveUnits="userSpaceOnUse"
+        x={-filterExtent}
+        y={-filterExtent}
+        width={filterSize}
+        height={filterSize}
+      >
+        <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
-      <filter id={`${prefix}-fluid-light-blur`} x="-40%" y="-40%" width="180%" height="180%">
-        <feGaussianBlur stdDeviation={fluidLightBlur} />
+      <filter
+        id={`${prefix}-fluid-light-blur`}
+        filterUnits="userSpaceOnUse"
+        primitiveUnits="userSpaceOnUse"
+        x={-filterExtent}
+        y={-filterExtent}
+        width={filterSize}
+        height={filterSize}
+      >
+        <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
-      <filter id={`${prefix}-frosted-blur`} x="-30%" y="-30%" width="160%" height="160%">
-        <feGaussianBlur stdDeviation={frostedBlur} />
+      <filter
+        id={`${prefix}-frosted-blur`}
+        filterUnits="userSpaceOnUse"
+        primitiveUnits="userSpaceOnUse"
+        x={-filterExtent}
+        y={-filterExtent}
+        width={filterSize}
+        height={filterSize}
+      >
+        <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
       {Object.values(SQUIRCLE_PALETTES).map((palette) => (
         <g key={palette.id}>
@@ -409,35 +433,35 @@ function SolidTopFace({
 }) {
   const fillOpacity = variant.material === "transparent" ? variant.opacity.transparentFace : 1;
   const effect = variant.material === "solid" ? variant.effect : "off";
-  const topWidth = geometry.topBounds.maxX - geometry.topBounds.minX;
-  const topHeight = geometry.topBounds.maxY - geometry.topBounds.minY;
+  const halfSize = geometry.config.halfSize;
   const baseRect = {
-    x: geometry.topBounds.minX - topWidth * 0.2,
-    y: geometry.topBounds.minY - topWidth * 0.2,
-    width: topWidth * 1.4,
-    height: topHeight + topWidth * 0.4
+    x: -halfSize * 1.3,
+    y: -halfSize * 1.3,
+    size: halfSize * 2.6
   };
 
   if (effect === "fluid") {
     return (
       <>
         <g className="sq-top-effect sq-top-effect-fluid" clipPath={`url(#${topClipId})`}>
-          <rect
-            x={baseRect.x}
-            y={baseRect.y}
-            width={baseRect.width}
-            height={baseRect.height}
-            fill={palette.effectColors[3]}
-          />
-          <g filter={`url(#${prefix}-fluid-main-blur)`}>
-            {FLUID_BASE_BLOBS.map((blob) => (
-              <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-            ))}
-          </g>
-          <g filter={`url(#${prefix}-fluid-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
-            {FLUID_LIGHT_BLOBS.map((blob) => (
-              <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-            ))}
+          <g transform={geometry.labelTransform}>
+            <rect
+              x={baseRect.x}
+              y={baseRect.y}
+              width={baseRect.size}
+              height={baseRect.size}
+              fill={palette.effectColors[3]}
+            />
+            <g filter={`url(#${prefix}-fluid-main-blur)`}>
+              {FLUID_BASE_BLOBS.map((blob) => (
+                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
+              ))}
+            </g>
+            <g filter={`url(#${prefix}-fluid-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
+              {FLUID_LIGHT_BLOBS.map((blob) => (
+                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
+              ))}
+            </g>
           </g>
         </g>
         <polygon
@@ -456,19 +480,21 @@ function SolidTopFace({
     return (
       <>
         <g className="sq-top-effect sq-top-effect-frosted" clipPath={`url(#${topClipId})`}>
-          <rect
-            x={baseRect.x}
-            y={baseRect.y}
-            width={baseRect.width}
-            height={baseRect.height}
-            fill={palette.effectColors[6]}
-          />
-          <g filter={`url(#${prefix}-frosted-blur)`}>
-            {FROSTED_BLOBS.map((blob) => (
-              <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-            ))}
+          <g transform={geometry.labelTransform}>
+            <rect
+              x={baseRect.x}
+              y={baseRect.y}
+              width={baseRect.size}
+              height={baseRect.size}
+              fill={palette.effectColors[6]}
+            />
+            <g filter={`url(#${prefix}-frosted-blur)`}>
+              {FROSTED_BLOBS.map((blob) => (
+                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
+              ))}
+            </g>
           </g>
-          <polygon points={topPoints} fill={palette.effectColors[0]} opacity={0.18} />
+          <polygon points={topPoints} fill="#eef2ff" opacity={0.16} />
         </g>
         <polygon
           className="sq-face sq-solid-top sq-effect-outline"
@@ -524,14 +550,14 @@ function MotionBlob({
   geometry: ReturnType<typeof createSquircleGeometry>;
   motionTime: number;
 }) {
-  const width = geometry.topBounds.maxX - geometry.topBounds.minX;
-  const height = geometry.topBounds.maxY - geometry.topBounds.minY;
-  const x = geometry.topBounds.minX + width * blob.x;
-  const y = geometry.topBounds.minY + height * blob.y;
-  const radius = width * blob.r;
-  const ax = width * blob.ax;
-  const ay = width * blob.ay;
-  const ar = width * blob.ar;
+  const halfSize = geometry.config.halfSize;
+  const planeWidth = halfSize * 2;
+  const x = halfSize * blob.x;
+  const y = halfSize * blob.y;
+  const radius = planeWidth * blob.r;
+  const ax = planeWidth * blob.ax;
+  const ay = planeWidth * blob.ay;
+  const ar = planeWidth * blob.ar;
   const cx = x + ax * Math.sin(motionTime * 0.62 * blob.sp + blob.i * 1.7) + 0.5 * ax * Math.cos(motionTime * 0.4 * blob.sp + blob.i * 0.6);
   const cy = y + ay * Math.cos(motionTime * 0.55 * blob.sp + blob.i * 2.1) + 0.55 * ay * Math.sin(motionTime * 0.34 * blob.sp + blob.i);
   const r = Math.max(4, radius + ar * Math.sin(motionTime * 0.8 + blob.i * 1.2));

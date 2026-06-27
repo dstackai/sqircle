@@ -142,7 +142,7 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `fluid` clips interval-driven blurred blobs to the top face. `frosted` uses the same blob system with a pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
+`effect: "off"` uses the normal static top gradient. `fluid` and `frosted` clip animated blurred color fields to the top face, but the fields are authored in the flat squircle plane and projected with the same isometric matrix as text. `frosted` adds a screen-space pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
 
 ## Stroke Parameters
 
@@ -209,3 +209,4 @@ Then open `/index.html` and `/demo.html` from the Vite dev server and verify:
 - no-op hover layers do not blink.
 - wireframe text outline uses the text-local gradient, not a single-stroke replacement.
 - solid palettes can switch between `off`, `fluid`, and `frosted` without moving geometry or annotations.
+- `fluid` and `frosted` read as smooth projected surface fields, not as visible screen-space circles.

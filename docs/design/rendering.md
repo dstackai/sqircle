@@ -25,25 +25,52 @@ Wireframe mode uses the top gradient as the stroke gradient so upper and lower c
 | Effect | Rendering |
 | --- | --- |
 | `off` | A static top polygon filled by the resolved top gradient. This is the default. |
-| `fluid` | A full-resolution top-face `clipPath` containing a base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
-| `frosted` | The same clipped moving-blob idea, muted by a deep base, a pale palette-derived veil, and a brighter neutral rim. |
+| `fluid` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
+| `frosted` | The same projected moving-blob field, muted by a deep base, then finished in screen space with a pale veil and a brighter neutral rim. |
 
 The moving effects are interval-driven inside `SquircleScene`; they do not query the global DOM and they do not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid `fluid` or `frosted` state.
 
-Effect scale is always derived from `W`, the generated top-face bounding-box width, not from fixed pixels:
+Effect color layers are authored in the flat top-face local coordinate system, not in screen coordinates. Local `(0, 0)` is the center of the raw superellipse, and local `a` is `geometry.config.halfSize`. The whole color field is then wrapped in the same isometric matrix used by labels:
+
+```text
+matrix(cosA, sinA, -cosA, sinA, cx, cy - h)
+```
+
+This means circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon. For `frosted`, the white veil and bright rim also stay in screen space; only the blob/color field is projected.
+
+The SVG structure for effect faces must keep this order:
+
+```svg
+<g clip-path="url(#top-clip)">
+  <g transform="matrix(cosA,sinA,-cosA,sinA,cx,cy-h)">
+    <rect ... />
+    <g filter="url(#local-blur)">
+      <circle ... />
+    </g>
+  </g>
+  <!-- frost-only veil stays here in screen space -->
+</g>
+<!-- rim and outline stay here in screen space -->
+```
+
+Effect scale is always derived from `W = 2 * a`, the local top-plane width, not from screen pixels or the projected bbox:
 
 - Main blob radius is about `0.45 * W`.
-- Blur is about `0.10 * W`, keeping `blur / radius` near `0.21`.
-- Drift amplitude is about `0.30 * W`.
-- Blob centers are allowed to sit outside the top-face bbox so every frame heavily overlaps and overfills the clipped face.
-- The base rectangle extends about `0.20 * W` beyond every side, so the face never shows gaps between blobs.
+- Blur is about `0.13 * W`, keeping `blur / radius` near `0.27`.
+- Drift amplitude is about `0.20..0.25 * W`.
+- Blob centers are allowed to sit outside `+-a` so every frame heavily overlaps and overfills the clipped face.
+- The base rectangle covers `+-1.3a`, so the face never shows gaps between blobs.
+
+The blur filters use `filterUnits="userSpaceOnUse"` and `primitiveUnits="userSpaceOnUse"` with a local filter region centered around `(0, 0)`. If `halfSize` changes, blob radii, blur, positions, base rect, and motion amplitudes must all scale from `a` or `W` together. Scaling only some of them makes the blobs collapse into visible circles.
 
 Effect invariants:
 
 - The clip path uses the same generated `topPoints` polygon as the normal top face.
+- Fluid/frosted color blobs must never be placed directly in screen coordinates.
+- Fluid/frosted must not use `feDisplacementMap`; it turns the smooth surface field into raster clouds.
 - Annotations render after the effect, so text and dash stay readable and stay glued to the top plane.
 - Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.
-- Effect colors are derived from the selected alpha palette's top and side stops, except neutral white rim/highlight overlays used only for glassy sharpness.
+- Effect colors are derived from the selected alpha palette's top and side stops, except neutral white veil/rim overlays used only for glassy sharpness.
 
 ## Sharpness Edge
 

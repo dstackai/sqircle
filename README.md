@@ -188,7 +188,15 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `fluid` clips animated blurred blobs to the top face. `frosted` uses the same blob system with a pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
+`effect: "off"` uses the normal static top gradient. `fluid` and `frosted` clip animated blurred color fields to the top face, with the color field authored in local squircle-plane coordinates and projected through the same isometric matrix as text. `frosted` adds a screen-space pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
+
+## Surface Effects
+
+Solid squircles can opt into animated top-surface effects with `effect: "fluid"` or `effect: "frosted"`. Both effects keep the prism geometry fixed: only the top face paint changes.
+
+The color field is built in the flat squircle plane, blurred in that local coordinate system, and then projected onto the top face. The generated top polygon remains the screen-space clip path, while the frosted veil and rim stay screen-space overlays. This keeps the gradients reading as surface paint instead of flat circles floating above the prism.
+
+Use [Rendering Contract](docs/design/rendering.md) for the exact ratios and SVG nesting rules before changing these effects.
 
 ## HTML Pages
 
@@ -239,4 +247,5 @@ Start at [Documentation Index](docs/README.md). The docs are split by purpose:
 - Render top-plane text as one SVG text element on the projected top plane. Do not duplicate it for filled and wireframe states.
 - Keep variant colors synchronized with [Color System](docs/design/colors.md).
 - Keep animated top effects clipped to the generated full-resolution top polygon; annotations still draw above the effect.
+- Keep fluid/frosted color fields in local top-plane coordinates before projection; do not place their blobs directly in screen space.
 - Keep the body background transparent.
