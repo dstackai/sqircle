@@ -1,10 +1,11 @@
-import type { SquircleLayerConfig, SquircleMaterial, SquircleTheme, SquircleVariantConfig } from "../squircle";
+import type { SquircleEffect, SquircleLayerConfig, SquircleMaterial, SquircleTheme, SquircleVariantConfig } from "../squircle";
 import { SQUIRCLE_PALETTE_IDS, reflowLayerOffsets } from "../squircle";
 
 export const PAGE_LAYER_GAP = 88;
 export const PAGE_PALETTES = SQUIRCLE_PALETTE_IDS;
 
 const materials: SquircleMaterial[] = ["wireframe", "solid", "transparent"];
+const effects = ["off", "fluid", "frosted"] as const satisfies readonly SquircleEffect[];
 const labels = ["GPU", "CUDA", "AI", "{}"];
 
 export interface CompositionPreset {
@@ -41,6 +42,8 @@ export function createSingleStatePresets(paletteId: string): CompositionPreset[]
     { material: "solid", paletteId, text: "GPU", textStyle: "wireframe" },
     { material: "solid", paletteId, dash: true },
     { material: "solid", paletteId, text: "GPU", textStyle: "solid", dash: true },
+    { material: "solid", paletteId, effect: "fluid", text: "GPU", textStyle: "solid", dash: true },
+    { material: "solid", paletteId, effect: "frosted", text: "{}", textStyle: "wireframe", dash: true },
     { material: "transparent", paletteId },
     { material: "transparent", paletteId, text: "GPU", textStyle: "solid" },
     { material: "transparent", paletteId, text: "GPU", textStyle: "wireframe", dash: true },
@@ -135,6 +138,7 @@ function createVariant(index: number, paletteId: string, layerIndex: number): Sq
   return {
     material,
     paletteId,
+    effect: material === "solid" ? effects[index % effects.length] : undefined,
     text: withText ? labels[(index + layerIndex) % labels.length] : false,
     textStyle,
     dash: withDash
@@ -143,10 +147,12 @@ function createVariant(index: number, paletteId: string, layerIndex: number): Sq
 
 function hoverFor(base: SquircleVariantConfig, index: number, paletteId = base.paletteId ?? "15"): SquircleVariantConfig {
   const material = base.material === "wireframe" ? "solid" : "wireframe";
+
   return {
     ...base,
     material,
     paletteId,
+    effect: material === "solid" ? effects[index % effects.length] : base.effect,
     textStyle: base.textStyle === "wireframe" ? "solid" : "wireframe"
   };
 }

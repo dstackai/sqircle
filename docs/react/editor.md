@@ -84,8 +84,8 @@ The editor exposes the common constructor surface:
 - layer add/delete/visibility and preview selection
 - theme
 - scene radius, height, and dash size
-- base material, palette, text, text paint, text color, text size, font weight, dash, and dash color
-- hover material, palette, text, text paint, text color, text size, font weight, dash, and dash color
+- base material, palette, effect, text, text paint, text color, text size, font weight, dash, and dash color
+- hover material, palette, effect, text, text paint, text color, text size, font weight, dash, and dash color
 - collapsed stroke width controls for face, wire, dash, and text outline
 - generated React code
 
@@ -98,6 +98,8 @@ Supported renderer API fields that remain intentionally code-only in the editor:
 - deeper stroke tuning: `faceOpacity`, `wireOpacity`, `hidden`, `hiddenOpacity`, `wireDash`
 - advanced geometry beyond Radius/Height/Dash size: `angleDegrees`, `center`, `width`, `viewBoxHeight`, `samples`, `halfSize`
 - manual layer offsets and scene fitting
+
+The `Effect` segmented control appears only when the edited state has `material: "solid"`. It writes `effect: "off" | "fluid" | "frosted"`. The renderer ignores this field for `transparent` and `wireframe`, so hiding the control for those materials avoids implying that it changes glass or wire states.
 
 ## Annotation Rules
 
@@ -155,5 +157,6 @@ Then open `/constructor.html` from the Vite dev server and verify:
 - click selection works in the layer list and preview.
 - visibility, add, delete, theme switching, and shape controls update the preview.
 - base and hover state tabs expose the same variant controls.
+- palette and effect changes update the preview and copied code.
 - no-op hover layers do not blink.
 - copied React code imports the expected package path and includes active layers, theme, and geometry.

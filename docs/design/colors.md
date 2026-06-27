@@ -4,15 +4,11 @@ This file is the palette contract for variants, gradients, text labels, and edge
 
 ## Sources Of Truth
 
-Colors are defined in shared CSS and in each self-contained HTML page that embeds SVG definitions. Keep them synchronized:
+Colors are defined in `src/squircle/palettes.ts` and consumed by `SquircleScene`. The root HTML files are Vite shells and do not own gradient stops. Keep these synchronized:
 
-1. SVG gradients in `index.html`, `demo.html`, and `constructor.html`:
-   - `top-13..top-20`
-   - `gpu-surface-13..gpu-surface-20` in static fixtures, mirrored as `text-surface-*` in React output
-   - `side-13..side-20`
-2. CSS variables in `public/static/styles.css`:
-   - Selected-variant selectors for `.hero-card` and `.single-drawer`
-   - `.v13..v20` classes for variant cards
+1. `SQUIRCLE_PALETTES`: alpha palettes `13..20`.
+2. Renderer docs in `README.md` and `docs/react/README.md`.
+3. This design file.
 
 Do not add or rename a variant in only one place.
 
@@ -45,7 +41,7 @@ The text surface gradient repeats the matching `top-*` stops with label-local co
 
 ## CSS Variable Contract
 
-Every selected-variant selector must target both `.hero-card` and `.single-drawer`:
+Legacy static snapshots used CSS variables such as `--top-fill` and `--side-fill`. New React work should not edit those snapshots as source of truth. If a legacy static snapshot must be refreshed, keep every selected-variant selector targeting both `.hero-card` and `.single-drawer`:
 
 ```css
 #variant-15:checked ~ .hero-card,
@@ -136,15 +132,9 @@ This is intentional: light does not interact with a wireframe surface, so top an
 
 ## Adding A Variant
 
-When adding a new variant:
+When adding a new palette:
 
-1. Add `top-*`, `gpu-surface-*`, and `side-*` gradients in `index.html`.
-2. Mirror those gradients in `demo.html` and `constructor.html` if those pages need the new palette.
-3. Add a hidden variant radio.
-4. Add a selected-variant CSS selector targeting `.hero-card` and `.single-drawer`.
-5. Add a `.v*` class with matching variables.
-6. Add the palette to the constructor `PALETTES` array.
-7. Add a variant card in the drawer.
-8. Add the title span in the hero copy.
-9. Update this palette table.
-10. Render hero, variant drawer, single-state drawer, demo presets, and constructor controls to confirm synchronized colors.
+1. Add it to `SQUIRCLE_PALETTES`.
+2. Include top, side, text-wire, label fill, top edge, side edge, and swatch values.
+3. Update the palette table above.
+4. Render the examples and constructor controls.

@@ -64,7 +64,13 @@ const layers: SquircleLayerConfig[] = [
   {
     id: "top",
     offset: { y: 0 },
-    base: { material: "solid", paletteId: "15", text: "GPU", dash: true },
+    base: {
+      material: "solid",
+      paletteId: "15",
+      effect: "fluid",
+      text: "GPU",
+      dash: true
+    },
     hover: { material: "wireframe", paletteId: "20" }
   }
 ];
@@ -116,6 +122,7 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | --- | --- | --- | --- |
 | `material` | `solid`, `transparent`, `wireframe` | `wireframe` | Prism rendering mode. |
 | `paletteId` | `13` through `20` | `15` | Palette from `SQUIRCLE_PALETTES`. |
+| `effect` | `off`, `fluid`, `frosted` | `off` | Solid-material top-face effect. Ignored by transparent and wireframe materials. |
 | `text` | `string`, `boolean` | none | Render top-plane text. Pass a string such as `"GPU"` or `"{}"`; `true` is a compatibility shorthand for `"GPU"`. |
 | `dash` | `boolean` | `false` | Render the dashed inlay. |
 | `textStyle` | `solid`, `wireframe` | `solid` | Filled or outlined text. |
@@ -181,6 +188,8 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
+`effect: "off"` uses the normal static top gradient. `fluid` clips animated blurred blobs to the top face. `frosted` uses the same blob system with a pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
+
 ## HTML Pages
 
 The root HTML files are intentionally thin shells. They mount React entrypoints from `src/pages`, and those pages render examples built on the package components.
@@ -229,4 +238,5 @@ Start at [Documentation Index](docs/README.md). The docs are split by purpose:
 - Keep hover swaps opacity-only: no transform, scale, filter, halo, or layer-gap changes.
 - Render top-plane text as one SVG text element on the projected top plane. Do not duplicate it for filled and wireframe states.
 - Keep variant colors synchronized with [Color System](docs/design/colors.md).
+- Keep animated top effects clipped to the generated full-resolution top polygon; annotations still draw above the effect.
 - Keep the body background transparent.

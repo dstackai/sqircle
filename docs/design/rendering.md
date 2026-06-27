@@ -18,6 +18,33 @@ React uses `text-surface-*` gradients to remap the top face stops into the label
 
 Wireframe mode uses the top gradient as the stroke gradient so upper and lower curves match. This intentionally avoids fake lighting on wireframes.
 
+## Solid Surface Effects
+
+`SquircleVariantConfig.effect` changes only the top-face rendering for `material: "solid"`. It is ignored by `transparent` and `wireframe`.
+
+| Effect | Rendering |
+| --- | --- |
+| `off` | A static top polygon filled by the resolved top gradient. This is the default. |
+| `fluid` | A full-resolution top-face `clipPath` containing a base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
+| `frosted` | The same clipped moving-blob idea, muted by a deep base, a pale palette-derived veil, and a brighter neutral rim. |
+
+The moving effects are interval-driven inside `SquircleScene`; they do not query the global DOM and they do not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid `fluid` or `frosted` state.
+
+Effect scale is always derived from `W`, the generated top-face bounding-box width, not from fixed pixels:
+
+- Main blob radius is about `0.45 * W`.
+- Blur is about `0.10 * W`, keeping `blur / radius` near `0.21`.
+- Drift amplitude is about `0.30 * W`.
+- Blob centers are allowed to sit outside the top-face bbox so every frame heavily overlaps and overfills the clipped face.
+- The base rectangle extends about `0.20 * W` beyond every side, so the face never shows gaps between blobs.
+
+Effect invariants:
+
+- The clip path uses the same generated `topPoints` polygon as the normal top face.
+- Annotations render after the effect, so text and dash stay readable and stay glued to the top plane.
+- Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.
+- Effect colors are derived from the selected alpha palette's top and side stops, except neutral white rim/highlight overlays used only for glassy sharpness.
+
 ## Sharpness Edge
 
 Every filled face has a tiny in-family edge stroke:

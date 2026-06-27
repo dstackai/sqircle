@@ -1,6 +1,7 @@
 export type SquircleMaterial = "solid" | "transparent" | "wireframe";
 export type SquircleAnnotationColor = "contrast" | "auto" | "white" | "black";
 export type SquircleTextStyle = "solid" | "wireframe";
+export type SquircleEffect = "off" | "fluid" | "frosted";
 export type SquircleTheme = "light" | "dark";
 
 export interface SquirclePoint {
@@ -41,6 +42,7 @@ export interface SquircleOpacityConfig {
 export interface SquircleVariantConfig {
   material?: SquircleMaterial;
   paletteId?: string;
+  effect?: SquircleEffect;
   text?: string | boolean;
   dash?: boolean;
   textStyle?: SquircleTextStyle;

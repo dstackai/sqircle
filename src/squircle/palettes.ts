@@ -214,3 +214,7 @@ export const DEFAULT_PALETTE_ID: SquirclePaletteId = "15";
 export function getSquirclePalette(paletteId: string | undefined): SquirclePalette {
   return SQUIRCLE_PALETTES[paletteId as SquirclePaletteId] ?? SQUIRCLE_PALETTES[DEFAULT_PALETTE_ID];
 }
+
+export function isSquirclePaletteId(paletteId: string | undefined): paletteId is SquirclePaletteId {
+  return Boolean(paletteId && paletteId in SQUIRCLE_PALETTES);
+}

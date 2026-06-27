@@ -22,7 +22,7 @@ The maintainable renderer implementation lives in `src/squircle`. The root HTML 
       id: "bottom",
       offset: { y: 176 },
       base: { material: "wireframe", paletteId: "15" },
-      hover: { material: "solid", paletteId: "20" },
+      hover: { material: "solid", paletteId: "20", effect: "fluid" },
       stroke: { wire: 1.6, face: 0.35, labelWire: 1.1 }
     }
   ]}
@@ -76,6 +76,7 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | --- | --- | --- | --- |
 | `material` | `solid`, `transparent`, `wireframe` | `wireframe` | Prism rendering mode. |
 | `paletteId` | `13` through `20` | `15` | Palette from `SQUIRCLE_PALETTES`. |
+| `effect` | `off`, `fluid`, `frosted` | `off` | Solid-material top-face effect. Ignored by transparent and wireframe materials. |
 | `text` | `string`, `boolean` | none | Render top-plane text. Pass a string such as `"GPU"` or `"{}"`; `true` is a compatibility shorthand for `"GPU"`. |
 | `dash` | `boolean` | `false` | Render the dashed inlay. |
 | `textStyle` | `solid`, `wireframe` | `solid` | Filled or outlined text. |
@@ -141,6 +142,8 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
+`effect: "off"` uses the normal static top gradient. `fluid` clips interval-driven blurred blobs to the top face. `frosted` uses the same blob system with a pale veil and brighter rim. Effect colors are derived from the selected alpha palette.
+
 ## Stroke Parameters
 
 Stroke widths and opacities are explicit data, not hard-coded CSS side effects:
@@ -172,7 +175,7 @@ Set `layer.stroke` for layer-wide defaults. Set `base.stroke` or `hover.stroke` 
 - `topEdge` and `sideEdge`: hairline edge strokes
 - `swatch`: UI preview colors
 
-Do not invent colors inside a layer config. Add new palettes to `palettes.ts` and update [colors.md](../design/colors.md).
+Do not invent colors inside a layer config. Add new palettes to `palettes.ts` and update [colors.md](../design/colors.md). Effect colors are derived from palette stops except for neutral white highlight/rim overlays documented in [rendering.md](../design/rendering.md).
 
 ## Geometry
 
@@ -205,3 +208,4 @@ Then open `/index.html` and `/demo.html` from the Vite dev server and verify:
 - adding layers keeps array order as draw order.
 - no-op hover layers do not blink.
 - wireframe text outline uses the text-local gradient, not a single-stroke replacement.
+- solid palettes can switch between `off`, `fluid`, and `frosted` without moving geometry or annotations.

@@ -2,9 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { createSquircleReactCode } from "./codeExport";
 import { DEFAULT_GEOMETRY, reflowLayerOffsets } from "./geometry";
-import { SQUIRCLE_PALETTE_IDS, SQUIRCLE_PALETTES } from "./palettes";
+import {
+  DEFAULT_PALETTE_ID,
+  SQUIRCLE_PALETTE_IDS,
+  SQUIRCLE_PALETTES
+} from "./palettes";
 import { SquircleScene } from "./SquircleScene";
-import type { SquircleAnnotationColor, SquircleGeometryConfig, SquircleLayerConfig, SquircleMaterial, SquircleTheme, SquircleVariantConfig } from "./types";
+import type {
+  SquircleAnnotationColor,
+  SquircleGeometryConfig,
+  SquircleLayerConfig,
+  SquircleMaterial,
+  SquircleEffect,
+  SquircleTheme,
+  SquircleVariantConfig
+} from "./types";
 import "./SquircleEditor.css";
 
 const DEFAULT_LAYER_GAP = 88;
@@ -33,6 +45,11 @@ const MATERIAL_OPTIONS = [
   { value: "solid", label: "Solid", title: "Filled prism with top and side gradients" },
   { value: "transparent", label: "Glass", title: "Translucent filled prism" }
 ] satisfies { value: SquircleMaterial; label: string; title: string }[];
+const EFFECT_OPTIONS = [
+  { value: "off", label: "Off", title: "Use the static top-face gradient" },
+  { value: "fluid", label: "Fluid", title: "Animated clipped gradient blobs on the top face" },
+  { value: "frosted", label: "Frosted", title: "Muted animated blobs with a pale glass veil and rim" }
+] satisfies { value: SquircleEffect; label: string; title: string }[];
 const TEXT_STYLE_OPTIONS = [
   { value: "solid", label: "Filled", title: "Filled top-plane text" },
   { value: "wireframe", label: "Outline", title: "Outlined top-plane text" }
@@ -300,6 +317,7 @@ export function SquircleEditor({
               const index = layers.length - reverseIndex;
               const palette = getPalette(layer.base.paletteId);
               const material = layer.base.material ?? "wireframe";
+              const effect = variantEffect(layer.base);
               return (
                 <article className={layer.id === selectedId ? "squircle-editor-layer-row is-active" : "squircle-editor-layer-row"} key={layer.id}>
                   <button
@@ -324,8 +342,9 @@ export function SquircleEditor({
                       <span className="layer-feature-tags">
                         {variantHasText(layer.base) ? <span>Text</span> : null}
                         {layer.base.dash ? <span>Dash</span> : null}
+                        {material === "solid" && effect !== "off" ? <span>{effect}</span> : null}
                         {layer.hover ? <span>Hover</span> : null}
-                        {!variantHasText(layer.base) && !layer.base.dash && !layer.hover ? <span>Clean</span> : null}
+                        {!variantHasText(layer.base) && !layer.base.dash && !layer.hover && effect === "off" ? <span>Clean</span> : null}
                       </span>
                     </span>
                   </button>
@@ -602,18 +621,28 @@ function VariantControls({
   variant: SquircleVariantConfig;
   onChange: (patch: SquircleVariantConfig) => void;
 }) {
+  const material = variant.material ?? "wireframe";
+
   return (
     <div className="variant-controls">
       <SegmentedField
         label="Material"
-        value={variant.material ?? "wireframe"}
+        value={material}
         options={MATERIAL_OPTIONS}
         onChange={(material) => onChange({ material })}
       />
       <PaletteField
-        value={variant.paletteId ?? "15"}
+        value={paletteIdForEditor(variant.paletteId)}
         onChange={(paletteId) => onChange({ paletteId })}
       />
+      {material === "solid" ? (
+        <SegmentedField
+          label="Effect"
+          value={variantEffect(variant)}
+          options={EFFECT_OPTIONS}
+          onChange={(effect) => onChange({ effect })}
+        />
+      ) : null}
 
       <div className="feature-grid" aria-label="Top details">
         <FeatureSwitch
@@ -780,23 +809,27 @@ function PaletteField({ value, onChange }: { value: string; onChange: (value: st
     <div className="field palette-field">
       <span>Palette</span>
       <div className="palette-grid" role="group" aria-label="Palette">
-        {SQUIRCLE_PALETTE_IDS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            title={SQUIRCLE_PALETTES[id].label}
-            aria-pressed={value === id}
-            onClick={() => onChange(id)}
-          >
-            <span
-              className="palette-swatch"
-              style={{
-                background: `linear-gradient(135deg, ${SQUIRCLE_PALETTES[id].swatch[0]}, ${SQUIRCLE_PALETTES[id].swatch[1]})`
-              }}
-            />
-            <span>{id}</span>
-          </button>
-        ))}
+        {SQUIRCLE_PALETTE_IDS.map((id) => {
+          const palette = getPalette(id);
+
+          return (
+            <button
+              key={id}
+              type="button"
+              title={palette.label}
+              aria-pressed={value === id}
+              onClick={() => onChange(id)}
+            >
+              <span
+                className="palette-swatch"
+                style={{
+                  background: `linear-gradient(135deg, ${palette.swatch[0]}, ${palette.swatch[1]})`
+                }}
+              />
+              <span>{id}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -904,13 +937,24 @@ function CodeIcon() {
 
 function summary(variant: SquircleVariantConfig): string {
   const parts = [materialLabel(variant.material ?? "wireframe"), getPalette(variant.paletteId).label];
+  const effect = variantEffect(variant);
+  if ((variant.material ?? "wireframe") === "solid" && effect !== "off") parts.push(effect);
   if (variantHasText(variant)) parts.push(`text: ${variantTextValue(variant)}`);
   if (variant.dash) parts.push("dash");
   return parts.join(" / ");
 }
 
 function getPalette(paletteId: string | undefined) {
-  return SQUIRCLE_PALETTES[paletteId as keyof typeof SQUIRCLE_PALETTES] ?? SQUIRCLE_PALETTES["15"];
+  return SQUIRCLE_PALETTES[paletteId as keyof typeof SQUIRCLE_PALETTES] ?? SQUIRCLE_PALETTES[DEFAULT_PALETTE_ID];
+}
+
+function paletteIdForEditor(paletteId: string | undefined): string {
+  return paletteId && paletteId in SQUIRCLE_PALETTES ? paletteId : DEFAULT_PALETTE_ID;
+}
+
+function variantEffect(variant: SquircleVariantConfig): SquircleEffect {
+  if (variant.effect === "fluid" || variant.effect === "frosted") return variant.effect;
+  return "off";
 }
 
 function materialLabel(material: SquircleMaterial): string {

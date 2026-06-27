@@ -773,6 +773,13 @@ select {
   font-size: 12px;
 }
 
+.palette-grid button span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .palette-grid button[aria-pressed="true"] {
   border-color: color-mix(in srgb, var(--editor-accent) 68%, var(--editor-line));
   background:
