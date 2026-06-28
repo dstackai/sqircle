@@ -53,7 +53,8 @@ const MATERIAL_OPTIONS = [
 ] satisfies { value: SquircleMaterial; label: string; title: string }[];
 const EFFECT_OPTIONS = [
   { value: "off", label: "Off", title: "Use the static top-face gradient" },
-  { value: "metal", label: "Metal", title: "Animated projected metallic gradient on the top face" }
+  { value: "metal", label: "Metal", title: "Animated projected metallic gradient on the top face" },
+  { value: "mesh", label: "Mesh", title: "Animated mesh gradient with four corner colors trading places" }
 ] satisfies { value: SquircleEffect; label: string; title: string }[];
 const TEXT_STYLE_OPTIONS = [
   { value: "solid", label: "Filled", title: "Filled top-plane text" },
@@ -391,9 +392,10 @@ export function SquircleEditor({
                       <span className="layer-feature-tags">
                         {variantHasText(layer.base) ? <span>Text</span> : null}
                         {layer.base.line ? <span>Line</span> : null}
+                        {materialSupportsEffect(material) && layer.base.grain ? <span>Grain</span> : null}
                         {materialSupportsEffect(material) && effect !== "off" ? <span>{effect}</span> : null}
                         {layer.hover ? <span>Hover</span> : null}
-                        {!variantHasText(layer.base) && !layer.base.line && !layer.hover && effect === "off" ? <span>Clean</span> : null}
+                        {!variantHasText(layer.base) && !layer.base.line && !layer.base.grain && !layer.hover && effect === "off" ? <span>Clean</span> : null}
                       </span>
                     </span>
                   </button>
@@ -736,6 +738,15 @@ function VariantControls({
 
       <div className="feature-grid" aria-label="Top details">
         <FeatureSwitch
+          label="Grain"
+          checked={variant.grain === true}
+          disabled={!materialSupportsEffect(material)}
+          title={materialSupportsEffect(material)
+            ? "Add subtle multiply-blended surface grain clipped to the top face."
+            : "Grain applies to Solid and Transparent materials."}
+          onChange={(grain) => onChange({ grain })}
+        />
+        <FeatureSwitch
           label="Text"
           checked={variantHasText(variant)}
           title="Toggle top-plane text for this state."
@@ -810,11 +821,13 @@ function VariantControls({
 function FeatureSwitch({
   label,
   checked,
+  disabled = false,
   title,
   onChange
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   title?: string;
   onChange: (value: boolean) => void;
 }) {
@@ -823,6 +836,7 @@ function FeatureSwitch({
       type="button"
       className="feature-switch"
       aria-pressed={checked}
+      disabled={disabled}
       title={title}
       onClick={() => onChange(!checked)}
     >
@@ -1046,6 +1060,7 @@ function summary(variant: SquircleVariantConfig): string {
   const parts = [materialLabel(variant.material ?? "wireframe"), getPalette(variant.paletteId).label];
   const effect = variantEffect(variant);
   if (materialSupportsEffect(variant.material ?? "wireframe") && effect !== "off") parts.push(effect);
+  if (materialSupportsEffect(variant.material ?? "wireframe") && variant.grain) parts.push("grain");
   if (variantHasText(variant)) parts.push(`text: ${variantTextValue(variant)}`);
   if (variant.line) parts.push(`${variant.line} line`);
   return parts.join(" / ");
@@ -1060,7 +1075,7 @@ function paletteIdForEditor(paletteId: string | undefined): string {
 }
 
 function variantEffect(variant: SquircleVariantConfig): SquircleEffect {
-  if (variant.effect === "metal") return variant.effect;
+  if (variant.effect === "metal" || variant.effect === "mesh") return variant.effect;
   return "off";
 }
 

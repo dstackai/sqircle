@@ -4,7 +4,7 @@ export type SquircleMaterial = "solid" | "transparent" | "wireframe";
 export type SquircleAnnotationColor = "auto" | "white" | "black";
 export type SquircleTextStyle = "solid" | "wireframe";
 export type SquircleLineStyle = "solid" | "dotted" | "dashed";
-export type SquircleEffect = "off" | "metal";
+export type SquircleEffect = "off" | "metal" | "mesh";
 export type SquircleTheme = "light" | "dark";
 
 export interface SquirclePoint {
@@ -48,6 +48,7 @@ export interface SquircleVariantConfig {
   material?: SquircleMaterial;
   paletteId?: string;
   effect?: SquircleEffect;
+  grain?: boolean;
   text?: string | false;
   line?: SquircleLineStyle | false;
   textStyle?: SquircleTextStyle;

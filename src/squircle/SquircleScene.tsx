@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, SVGProps } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, SVGProps } from "react";
 import { createSquircleGeometry, pointsToString } from "./geometry";
 import {
   DEFAULT_PALETTE_ID,
@@ -17,6 +17,7 @@ import type {
   SquircleLineStyle,
   SquircleMaterial,
   SquircleOpacityConfig,
+  SquirclePoint,
   SquircleSceneProps,
   SquircleStrokeConfig,
   SquircleEffect,
@@ -48,6 +49,11 @@ const DEFAULT_TEXT_SIZE = 62;
 const DEFAULT_TEXT_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 const DEFAULT_TEXT_FONT_WEIGHT = 400;
 const DEFAULT_EFFECT: SquircleEffect = "off";
+const GRAIN_OPACITY = 0.46;
+const GRAIN_BASE_FREQUENCY = 2.4;
+const GRAIN_OCTAVES = 3;
+const GRAIN_CONTRAST_SLOPE = 2.2;
+const GRAIN_CONTRAST_INTERCEPT = -0.22;
 const MOTION_INTERVAL_MS = 33;
 const motionClockSubscribers = new Set<(time: number) => void>();
 let motionClockInterval: number | null = null;
@@ -74,6 +80,7 @@ type ResolvedVariant = {
   material: SquircleMaterial;
   paletteId: string;
   effect: SquircleEffect;
+  grain: boolean;
   text: string | null;
   line: SquircleLineStyle | null;
   textStyle: SquircleTextStyle;
@@ -97,6 +104,42 @@ type RenderPalette = {
   side: SquircleGradientStop[];
   textWire: SquircleGradientStop[];
   effectColors: EffectColorSet;
+};
+
+type LayerModel = {
+  layer: SquircleLayerConfig;
+  index: number;
+  prefix: string;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+};
+
+type GrainOverlayRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type GrainOverlayBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+type GrainOverlayModel = {
+  key: string;
+  visible: boolean;
+  opacity: number;
+  rect: GrainOverlayRect;
+  clipPoints: string;
+};
+
+type ViewBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 export function SquircleScene({
@@ -132,7 +175,7 @@ export function SquircleScene({
   const sceneGeometry = useMemo(() => (geometry?.viewBoxHeight === viewBoxHeight
     ? baseGeometry
     : createSquircleGeometry({ ...geometry, viewBoxHeight })), [baseGeometry, geometry, viewBoxHeight]);
-  const layerModels = useMemo(() => visibleLayers.map((layer, index) => {
+  const layerModels = useMemo<LayerModel[]>(() => visibleLayers.map((layer, index) => {
     const layerPrefix = `${prefix}-${index}-${safeIdPart(layer.id)}`;
     const layerGeometry = layer.geometry
       ? createLayerGeometry(geometry, viewBoxHeight, layer.geometry)
@@ -143,20 +186,36 @@ export function SquircleScene({
   const layerEventModels = useMemo(() => new Map(
     layerModels.map(({ layer, index }) => [layer.id, { layer, index }])
   ), [layerModels]);
-  const svgStyle = { "--sq-transition-ms": `${transitionMs}ms` } as CSSProperties;
+  const sceneStyle = { "--sq-transition-ms": `${transitionMs}ms` } as CSSProperties;
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const hoveredLayerIdRef = useRef<string | null>(null);
   const [resolvedHoverState, setResolvedHoverState] = useState<ResolvedHoverState>({ layerId: null, visible: false });
   const resolvedHoverFrameRef = useRef<number | null>(null);
   const resolvedHoverClearTimerRef = useRef<number | null>(null);
   const hasHoverResolver = layerModels.some(({ layer }) => typeof layer.hover === "function");
-  const motionEnabled = layerModels.some(({ layer, index }) => {
+  const hasGrainCandidate = layerModels.some(({ layer }) => layerHasGrainSurface(layer));
+  const hoverMap = useMemo(() => createResolvedHoverMap({
+    layerModels,
+    layers: visibleLayers,
+    hoverState: resolvedHoverState,
+    controlledObjectHover: hasGrainCandidate
+  }), [hasGrainCandidate, layerModels, visibleLayers, resolvedHoverState]);
+  const motionEnabled = layerModels.some(({ layer }) => {
     if (layerHasAnimatedSurface(layer)) return true;
-    const hover = resolveLayerHover(layer, index, visibleLayers, resolvedHoverState.layerId, resolvedHoverState.visible);
+    const hover = hoverMap.get(layer.id);
     if (!hover?.enabled) return false;
     const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
     return variantHasAnimatedSurface(hoverVariant);
   });
   const motionTime = useMotionTime(motionEnabled);
+  const grainOverlays = useMemo(() => createGrainOverlays({
+    layerModels,
+    hoverMap,
+    sceneViewBox: sceneGeometry.viewBox
+  }), [layerModels, hoverMap, sceneGeometry.viewBox]);
+  const hasGrainOverlay = grainOverlays.length > 0;
+  const shouldUseGrainWrapper = hasGrainCandidate || hasGrainOverlay;
+  const needsPointerTracking = hasHoverResolver || hasGrainCandidate;
 
   useEffect(() => () => {
     if (resolvedHoverFrameRef.current !== null) {
@@ -167,32 +226,6 @@ export function SquircleScene({
     }
   }, []);
 
-  const handlePointerOver = hasHoverResolver
-    ? (event: ReactPointerEvent<SVGSVGElement>) => {
-        const layerElement = closestLayerElement(event.target, event.currentTarget);
-        const layerId = layerElement?.dataset.layerId;
-        if (!layerElement || !layerId || hoveredLayerIdRef.current === layerId) return;
-
-        hoveredLayerIdRef.current = layerId;
-        showResolvedHover(layerId);
-      }
-    : undefined;
-  const handlePointerOut = hasHoverResolver
-    ? (event: ReactPointerEvent<SVGSVGElement>) => {
-        const layerElement = closestLayerElement(event.target, event.currentTarget);
-        const layerId = layerElement?.dataset.layerId;
-        if (!layerElement || !layerId) return;
-
-        const nextLayerElement = closestLayerElement(event.relatedTarget, event.currentTarget);
-        const nextLayerId = nextLayerElement?.dataset.layerId ?? null;
-        if (nextLayerId === layerId) return;
-
-        if (!nextLayerId && hoveredLayerIdRef.current === layerId) {
-          hoveredLayerIdRef.current = null;
-          hideResolvedHover();
-        }
-      }
-    : undefined;
   const handleClick = onLayerClick
     ? (event: ReactMouseEvent<SVGSVGElement>) => {
         const layerElement = closestLayerElement(event.target, event.currentTarget);
@@ -240,16 +273,53 @@ export function SquircleScene({
     }, transitionMs);
   }
 
-  return (
+  useEffect(() => {
+    if (!needsPointerTracking) return undefined;
+
+    const root = svgRef.current;
+    if (!root) return undefined;
+
+    const handlePointerOver = (event: PointerEvent) => {
+      const layerElement = closestLayerElement(event.target, root);
+      const layerId = layerElement?.dataset.layerId;
+      if (!layerElement || !layerId || hoveredLayerIdRef.current === layerId) return;
+
+      hoveredLayerIdRef.current = layerId;
+      showResolvedHover(layerId);
+    };
+    const handlePointerOut = (event: PointerEvent) => {
+      const layerElement = closestLayerElement(event.target, root);
+      const layerId = layerElement?.dataset.layerId;
+      if (!layerElement || !layerId) return;
+
+      const nextLayerElement = closestLayerElement(event.relatedTarget, root);
+      const nextLayerId = nextLayerElement?.dataset.layerId ?? null;
+      if (nextLayerId === layerId) return;
+
+      if (!nextLayerId && hoveredLayerIdRef.current === layerId) {
+        hoveredLayerIdRef.current = null;
+        hideResolvedHover();
+      }
+    };
+
+    root.addEventListener("pointerover", handlePointerOver, { passive: true });
+    root.addEventListener("pointerout", handlePointerOut, { passive: true });
+
+    return () => {
+      root.removeEventListener("pointerover", handlePointerOver);
+      root.removeEventListener("pointerout", handlePointerOut);
+    };
+  }, [needsPointerTracking, transitionMs]);
+
+  const sceneSvg = (
     <svg
-      className={["squircle-scene", `sq-theme-${theme}`, className].filter(Boolean).join(" ")}
+      ref={svgRef}
+      className={["squircle-scene", `sq-theme-${theme}`, shouldUseGrainWrapper ? "" : className].filter(Boolean).join(" ")}
       data-theme={theme}
       viewBox={sceneGeometry.viewBox}
       role="img"
       aria-label={ariaLabel}
-      style={svgStyle}
-      onPointerOver={handlePointerOver}
-      onPointerOut={handlePointerOut}
+      style={shouldUseGrainWrapper ? undefined : sceneStyle}
       onClick={handleClick}
     >
       {layerModels.map((model) => (
@@ -259,7 +329,7 @@ export function SquircleScene({
         <SquircleLayer
           key={layer.id}
           layer={layer}
-          hover={resolveLayerHover(layer, index, visibleLayers, resolvedHoverState.layerId, resolvedHoverState.visible)}
+          hover={hoverMap.get(layer.id) ?? null}
           geometry={layerGeometry}
           prefix={layerPrefix}
           motionTime={motionTime}
@@ -267,6 +337,17 @@ export function SquircleScene({
         />
       ))}
     </svg>
+  );
+
+  if (!shouldUseGrainWrapper) return sceneSvg;
+
+  return (
+    <div className={["squircle-scene-root", className].filter(Boolean).join(" ")} style={sceneStyle}>
+      <div className="squircle-scene-frame">
+        {sceneSvg}
+        {hasGrainOverlay ? <GrainOverlay prefix={prefix} overlays={grainOverlays} /> : null}
+      </div>
+    </div>
   );
 }
 
@@ -444,11 +525,16 @@ function resolveLayerHover(
   index: number,
   layers: SquircleLayerConfig[],
   hoveredLayerId: string | null,
-  visible: boolean
+  visible: boolean,
+  controlledObjectHover: boolean
 ): RenderHoverConfig | null {
   if (!layer.hover) return null;
   if (typeof layer.hover !== "function") {
-    return { enabled: false, mode: "css", variant: layer.hover };
+    return {
+      enabled: controlledObjectHover && hoveredLayerId === layer.id && visible,
+      mode: controlledObjectHover ? "controlled" : "css",
+      variant: layer.hover
+    };
   }
   if (!hoveredLayerId) return null;
 
@@ -466,6 +552,23 @@ function resolveLayerHover(
   });
 
   return variant ? { enabled: visible, mode: "controlled", variant } : null;
+}
+
+function createResolvedHoverMap({
+  layerModels,
+  layers,
+  hoverState,
+  controlledObjectHover
+}: {
+  layerModels: LayerModel[];
+  layers: SquircleLayerConfig[];
+  hoverState: ResolvedHoverState;
+  controlledObjectHover: boolean;
+}): Map<string, RenderHoverConfig | null> {
+  return new Map(layerModels.map(({ layer, index }) => [
+    layer.id,
+    resolveLayerHover(layer, index, layers, hoverState.layerId, hoverState.visible, controlledObjectHover)
+  ]));
 }
 
 function createLayerClickEvent(
@@ -613,6 +716,7 @@ function SolidTopFace({
   topPoints: string;
   motionTime: number;
 }) {
+  const meshUid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const fillOpacity = variant.material === "transparent" ? variant.opacity.transparentFace : 1;
   const effect = variant.material === "wireframe" ? "off" : variant.effect;
   const effectOpacity = variant.material === "transparent" ? fillOpacity : 1;
@@ -622,6 +726,63 @@ function SolidTopFace({
     y: -halfSize * 1.3,
     size: halfSize * 2.6
   };
+
+  if (effect === "mesh") {
+    const alpha = 0.5 - 0.5 * Math.cos(0.6 * motionTime);
+    const beta = 0.5 - 0.5 * Math.cos(0.43 * motionTime + 1.1);
+    const homeBL = 0;
+    const homeBR = 0.66;
+    const homeTR = 1;
+    const homeTL = 0.33;
+    const levelBL = homeBL + (homeTR - homeBL) * alpha;
+    const levelTR = homeTR + (homeBL - homeTR) * alpha;
+    const levelBR = homeBR + (homeTL - homeBR) * beta;
+    const levelTL = homeTL + (homeBR - homeTL) * beta;
+    const colorTL = sampleStops(palette.top, levelTL);
+    const colorTR = sampleStops(palette.top, levelTR);
+    const colorBL = sampleStops(palette.top, levelBL);
+    const colorBR = sampleStops(palette.top, levelBR);
+    const topRowId = `${prefix}-mesh-top-${meshUid}`;
+    const bottomRowId = `${prefix}-mesh-bottom-${meshUid}`;
+    const maskGradientId = `${prefix}-mesh-mask-gradient-${meshUid}`;
+    const maskId = `${prefix}-mesh-mask-${meshUid}`;
+
+    return (
+      <>
+        <g className="sq-top-effect sq-top-effect-mesh" clipPath={`url(#${topClipId})`} opacity={effectOpacity}>
+          <defs>
+            <linearGradient id={topRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
+              <stop offset="0" stopColor={colorTL} />
+              <stop offset="1" stopColor={colorTR} />
+            </linearGradient>
+            <linearGradient id={bottomRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
+              <stop offset="0" stopColor={colorBL} />
+              <stop offset="1" stopColor={colorBR} />
+            </linearGradient>
+            <linearGradient id={maskGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={-halfSize} x2={0} y2={halfSize}>
+              <stop offset="0" stopColor="#ffffff" />
+              <stop offset="1" stopColor="#000000" />
+            </linearGradient>
+            <mask id={maskId} maskUnits="userSpaceOnUse" x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size}>
+              <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${maskGradientId})`} />
+            </mask>
+          </defs>
+          <g transform={geometry.labelTransform}>
+            <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${bottomRowId})`} />
+            <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${topRowId})`} mask={`url(#${maskId})`} />
+          </g>
+        </g>
+        <polygon
+          className="sq-face sq-solid-top sq-effect-outline"
+          points={topPoints}
+          fill="none"
+          stroke={palette.topEdge}
+          strokeWidth={variant.stroke.face}
+          strokeOpacity={variant.stroke.faceOpacity}
+        />
+      </>
+    );
+  }
 
   if (effect === "metal") {
     return (
@@ -720,10 +881,13 @@ function resolveVariant(
   layerStroke: Partial<SquircleStrokeConfig> = {},
   layerOpacity: Partial<SquircleOpacityConfig> = {}
 ): ResolvedVariant {
+  const material = variant.material ?? "wireframe";
+
   return {
-    material: variant.material ?? "wireframe",
+    material,
     paletteId: resolvePaletteId(variant.paletteId),
     effect: normalizeEffect(variant.effect ?? DEFAULT_EFFECT),
+    grain: material !== "wireframe" && variant.grain === true,
     text: normalizeTextValue(variant.text),
     line: normalizeLineStyle(variant.line),
     textStyle: normalizeTextStyle(variant.textStyle ?? "solid"),
@@ -747,7 +911,7 @@ function normalizeTextStyle(style: SquircleTextStyle | string): SquircleTextStyl
 }
 
 function normalizeEffect(effect: SquircleEffect | string): SquircleEffect {
-  if (effect === "metal") return effect;
+  if (effect === "metal" || effect === "mesh") return effect;
   return "off";
 }
 
@@ -885,6 +1049,20 @@ function variantHasAnimatedSurface(variant: ResolvedVariant): boolean {
   return variant.material !== "wireframe" && variant.effect !== "off";
 }
 
+function layerHasGrainSurface(layer: SquircleLayerConfig): boolean {
+  const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+  if (variantHasGrainSurface(base)) return true;
+  if (layer.hover && typeof layer.hover !== "function") {
+    const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
+    if (variantHasGrainSurface(hover)) return true;
+  }
+  return false;
+}
+
+function variantHasGrainSurface(variant: ResolvedVariant): boolean {
+  return variant.material !== "wireframe" && variant.grain;
+}
+
 function getRenderPalette(paletteId: string): RenderPalette {
   const palette = getSquirclePalette(paletteId);
 
@@ -911,6 +1089,236 @@ function alphaPaletteEffectColors(palette: ReturnType<typeof getSquirclePalette>
   return [topStart, topStart, topMid, topEnd, sideStart, sideMid, sideEnd];
 }
 
+function sampleStops(stops: SquircleGradientStop[], t: number): string {
+  if (stops.length === 0) return "#000000";
+  const clamped = Math.max(0, Math.min(1, t));
+
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const a = stops[index];
+    const b = stops[index + 1];
+    if (!a || !b) continue;
+
+    if (clamped <= b.offset || index === stops.length - 2) {
+      const span = b.offset - a.offset;
+      const amount = span <= 0 ? 0 : Math.max(0, Math.min(1, (clamped - a.offset) / span));
+      return mixHex(a.color, b.color, amount);
+    }
+  }
+
+  return stops.at(-1)?.color ?? "#000000";
+}
+
+function mixHex(colorA: string, colorB: string, amount: number): string {
+  const a = hexToRgb(colorA);
+  const b = hexToRgb(colorB);
+  const r = Math.round(a[0] + (b[0] - a[0]) * amount);
+  const g = Math.round(a[1] + (b[1] - a[1]) * amount);
+  const bl = Math.round(a[2] + (b[2] - a[2]) * amount);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((char) => char + char).join("") : h;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16)
+  ];
+}
+
 function roundNumber(value: number): number {
   return Number(value.toFixed(1));
+}
+
+function createGrainOverlays({
+  layerModels,
+  hoverMap,
+  sceneViewBox
+}: {
+  layerModels: LayerModel[];
+  hoverMap: Map<string, RenderHoverConfig | null>;
+  sceneViewBox: string;
+}): GrainOverlayModel[] {
+  const viewBox = parseViewBox(sceneViewBox);
+  const overlays: GrainOverlayModel[] = [];
+
+  layerModels.forEach(({ layer, prefix, geometry }) => {
+    const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+    const hover = hoverMap.get(layer.id) ?? null;
+    const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
+    const hasHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+    const hoverEnabled = Boolean(hasHover && hover?.enabled);
+    const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
+
+    if (variantHasGrainSurface(base)) {
+      overlays.push(createGrainOverlay({
+        key: `${prefix}-base`,
+        geometry,
+        offset,
+        viewBox,
+        opacity: grainOverlayOpacity(base) * (hoverEnabled ? 0 : 1)
+      }));
+    }
+
+    if (hasHover && hoverVariant && variantHasGrainSurface(hoverVariant)) {
+      overlays.push(createGrainOverlay({
+        key: `${prefix}-hover`,
+        geometry,
+        offset,
+        viewBox,
+        opacity: grainOverlayOpacity(hoverVariant) * (hoverEnabled ? 1 : 0)
+      }));
+    }
+  });
+
+  return overlays;
+}
+
+function createGrainOverlay({
+  key,
+  geometry,
+  offset,
+  viewBox,
+  opacity
+}: {
+  key: string;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  offset: SquirclePoint;
+  viewBox: ViewBox;
+  opacity: number;
+}): GrainOverlayModel {
+  const points = geometry.topPoints.map((point) => ({
+    x: point.x + offset.x,
+    y: point.y + offset.y
+  }));
+  const bounds = createGrainOverlayBounds(points);
+
+  return {
+    key,
+    visible: bounds.maxX > bounds.minX && bounds.maxY > bounds.minY,
+    opacity,
+    rect: createGrainOverlayRect(bounds, viewBox),
+    clipPoints: createGrainClipPoints(points, bounds)
+  };
+}
+
+function createGrainOverlayBounds(points: SquirclePoint[]): GrainOverlayBounds {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys)
+  };
+}
+
+function createGrainOverlayRect(bounds: GrainOverlayBounds, viewBox: ViewBox): GrainOverlayRect {
+  return {
+    x: (bounds.minX - viewBox.x) / viewBox.width,
+    y: (bounds.minY - viewBox.y) / viewBox.height,
+    width: (bounds.maxX - bounds.minX) / viewBox.width,
+    height: (bounds.maxY - bounds.minY) / viewBox.height
+  };
+}
+
+function createGrainClipPoints(points: SquirclePoint[], bounds: GrainOverlayBounds): string {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+
+  return points.map((point) => [
+    roundUnit((point.x - bounds.minX) / width),
+    roundUnit((point.y - bounds.minY) / height)
+  ].join(",")).join(" ");
+}
+
+function grainOverlayOpacity(variant: ResolvedVariant): number {
+  if (!variantHasGrainSurface(variant)) return 0;
+  if (variant.material === "transparent") return GRAIN_OPACITY * variant.opacity.transparentFace;
+  return GRAIN_OPACITY;
+}
+
+function parseViewBox(viewBox: string): ViewBox {
+  const [x = 0, y = 0, width = 800, height = 480] = viewBox.split(/\s+/).map(Number);
+
+  return {
+    x,
+    y,
+    width: width || 800,
+    height: height || 480
+  };
+}
+
+function GrainOverlay({ prefix, overlays }: { prefix: string; overlays: GrainOverlayModel[] }) {
+  const filterId = `${prefix}-grain`;
+  const visibleOverlays = overlays.filter((overlay) => overlay.visible);
+  if (visibleOverlays.length === 0) return null;
+
+  return (
+    <svg
+      className="sq-grain-overlay"
+      width="100%"
+      height="100%"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <filter
+          id={filterId}
+          x="0%"
+          y="0%"
+          width="100%"
+          height="100%"
+          filterUnits="objectBoundingBox"
+          primitiveUnits="userSpaceOnUse"
+        >
+          <feTurbulence type="fractalNoise" baseFrequency={GRAIN_BASE_FREQUENCY} numOctaves={GRAIN_OCTAVES} seed={14} result="n" />
+          <feColorMatrix in="n" type="saturate" values="0" />
+          <feComponentTransfer>
+            <feFuncR type="linear" slope={GRAIN_CONTRAST_SLOPE} intercept={GRAIN_CONTRAST_INTERCEPT} />
+            <feFuncG type="linear" slope={GRAIN_CONTRAST_SLOPE} intercept={GRAIN_CONTRAST_INTERCEPT} />
+            <feFuncB type="linear" slope={GRAIN_CONTRAST_SLOPE} intercept={GRAIN_CONTRAST_INTERCEPT} />
+            <feFuncA type="linear" slope={0} intercept={1} />
+          </feComponentTransfer>
+        </filter>
+        {visibleOverlays.map((overlay) => (
+          <clipPath key={`${overlay.key}-clip`} id={`${prefix}-grain-clip-${overlay.key}`} clipPathUnits="objectBoundingBox">
+            <polygon points={overlay.clipPoints} />
+          </clipPath>
+        ))}
+      </defs>
+      {visibleOverlays.map((overlay) => (
+        <svg
+          key={overlay.key}
+          x={`${roundPercent(overlay.rect.x)}%`}
+          y={`${roundPercent(overlay.rect.y)}%`}
+          width={`${roundPercent(overlay.rect.width)}%`}
+          height={`${roundPercent(overlay.rect.height)}%`}
+          overflow="hidden"
+          preserveAspectRatio="none"
+        >
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            clipPath={`url(#${prefix}-grain-clip-${overlay.key})`}
+            filter={`url(#${filterId})`}
+            style={{ opacity: overlay.opacity }}
+          />
+        </svg>
+      ))}
+    </svg>
+  );
+}
+
+function roundPercent(value: number): number {
+  return Number((value * 100).toFixed(4));
+}
+
+function roundUnit(value: number): number {
+  return Number(Math.max(0, Math.min(1, value)).toFixed(5));
 }

@@ -26,8 +26,9 @@ Wireframe mode uses the top gradient as the stroke gradient so upper and lower c
 | --- | --- |
 | `off` | A static top polygon filled by the resolved top gradient. This is the default. |
 | `metal` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
+| `mesh` | A full-resolution top-face `clipPath` containing a projected four-corner bilinear gradient. The four corner colors are sampled from `palette.top` and slowly exchange along diagonal pairs. No blobs, hotspots, noise, turbulence, or internal wave figures are used. |
 
-The moving effect is interval-driven inside `SquircleScene`; it does not query the global DOM and it does not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` state.
+The moving effects are interval-driven inside `SquircleScene`; they do not query the global DOM and they do not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` or `mesh` state.
 
 Effect color layers are authored in the flat top-face local coordinate system, not in screen coordinates. Local `(0, 0)` is the center of the raw superellipse, and local `a` is `geometry.config.halfSize`. The whole color field is then wrapped in the same isometric matrix used by labels:
 
@@ -35,7 +36,9 @@ Effect color layers are authored in the flat top-face local coordinate system, n
 matrix(cosA, sinA, -cosA, sinA, cx, cy - h)
 ```
 
-This means circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon.
+For `metal`, circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon.
+
+For `mesh`, the top row is a local horizontal gradient from top-left to top-right, the bottom row is a local horizontal gradient from bottom-left to bottom-right, and a local vertical mask crossfades the top row over the bottom row. The result is a true bilinear blend across the projected plane. Corner home levels are sampled from `palette.top` at `0`, `0.33`, `0.66`, and `1`; diagonal pairs exchange over staggered timers, so the palette is conserved while the corner assignment changes.
 
 The SVG structure for effect faces must keep this order:
 
@@ -66,10 +69,51 @@ Effect invariants:
 - The clip path uses the same generated `topPoints` polygon as the normal top face.
 - Metal color blobs must never be placed directly in screen coordinates.
 - Metal must not use `feDisplacementMap`; it turns the smooth surface field into raster clouds.
+- Mesh must stay a four-corner bilinear blend. Do not add radial gradients, spotlights, noise, turbulence, or wave structure.
+- Mesh corner colors must be sampled from `palette.top`, and the four sampled levels must remain conserved during animation.
 - Transparent material applies `transparentFace` opacity to the animated color field so effects do not make the top face fully opaque.
 - Annotations render after the effect, so text and line stay readable and stay glued to the top plane.
 - Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.
 - Effect colors are derived from the selected alpha palette's top and side stops.
+
+## Surface Grain
+
+`SquircleVariantConfig.grain` is independent of `effect`. It is honored only by `material: "solid"` and `material: "transparent"` and can sit over `off`, `metal`, or `mesh`.
+
+The grain is not drawn inside the prism geometry. `SquircleScene` creates a sibling `<svg class="sq-grain-overlay">` above the main scene, computes one overlay rectangle per grained top face, and clips each rectangle to the generated `topPoints` polygon converted into `objectBoundingBox` coordinates. This keeps grain off the page background and off the side wall.
+
+The current grain recipe is `mult-hard @ 0.5px`:
+
+```ts
+const GRAIN_OPACITY = 0.46;
+const GRAIN_BASE_FREQUENCY = 2.4;
+const GRAIN_OCTAVES = 3;
+const GRAIN_CONTRAST_SLOPE = 2.2;
+const GRAIN_CONTRAST_INTERCEPT = -0.22;
+```
+
+The overlay filter uses:
+
+```svg
+<feTurbulence type="fractalNoise" baseFrequency="2.4" numOctaves="3" seed="14" result="n" />
+<feColorMatrix in="n" type="saturate" values="0" />
+<feComponentTransfer>
+  <feFuncR type="linear" slope="2.2" intercept="-0.22" />
+  <feFuncG type="linear" slope="2.2" intercept="-0.22" />
+  <feFuncB type="linear" slope="2.2" intercept="-0.22" />
+  <feFuncA type="linear" slope="0" intercept="1" />
+</feComponentTransfer>
+```
+
+CSS applies `mix-blend-mode: multiply` to `.sq-grain-overlay`. The `-0.22` intercept recenters the grayscale transfer for multiply, so the overlay reads as subtle dark grit instead of bright sparkle. Transparent material multiplies the grain opacity by `transparentFace` so the texture follows the material opacity.
+
+Grain invariants:
+
+- The overlay must be `pointer-events: none`.
+- When grain is available, the scene root wraps an internal frame; the frame, not external layout padding, owns the main SVG and grain overlay alignment.
+- Each overlay clip must come from generated top points plus the layer offset, not from hand-written coordinates.
+- Grain hover changes should crossfade opacity with the same `--sq-transition-ms` as base/hover variants.
+- Do not use grain to add texture to wireframe material.
 
 ## Sharpness Edge
 

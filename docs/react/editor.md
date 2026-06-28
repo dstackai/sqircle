@@ -87,8 +87,8 @@ The editor exposes the common constructor surface:
 - theme
 - scene camera level
 - per-layer radius, height, and line size
-- base material, palette, effect, text, text paint, text color, text size, font weight, line style, and line color
-- hover material, palette, effect, text, text paint, text color, text size, font weight, line style, and line color
+- base material, palette, effect, grain, text, text paint, text color, text size, font weight, line style, and line color
+- hover material, palette, effect, grain, text, text paint, text color, text size, font weight, line style, and line color
 - collapsed stroke width controls for face, wire, line, and text outline
 - generated React code
 
@@ -104,7 +104,7 @@ Supported renderer API fields that remain intentionally code-only in the editor:
 - advanced shared geometry beyond Camera level and per-layer Radius/Height/Line size: `center`, `width`, `viewBoxHeight`, `samples`, `halfSize`
 - manual layer offsets and scene fitting
 
-The `Effect` segmented control appears when the edited state has `material: "solid"` or `material: "transparent"`. It writes `effect: "off" | "metal"`. The renderer ignores this field for `wireframe`, so hiding the control for wire states avoids implying that it changes line art.
+The `Effect` segmented control appears when the edited state has `material: "solid"` or `material: "transparent"`. The `Grain` feature switch stays visible for discoverability, but is disabled for `wireframe`. `Effect` writes `effect: "off" | "metal" | "mesh"`; `Grain` writes `grain: true | false`. The renderer ignores both fields for `wireframe`.
 
 ## Annotation Rules
 
@@ -167,7 +167,7 @@ Then open `/constructor.html` from the Vite dev server and verify:
 - the inspector close icon deselects the current layer and leaves the inspector empty.
 - visibility, reorder, add, delete, theme switching, and selected-layer shape controls update the preview.
 - base and hover state tabs expose the same variant controls.
-- palette and effect changes update the preview and copied code.
+- palette, effect, and grain changes update the preview and copied code.
 - reload preserves constructor state when `storageKey` is set.
 - no-op hover layers do not blink.
 - copied React code imports the expected package path and includes visible layers, per-layer geometry overrides, theme, and scene camera geometry.

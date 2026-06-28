@@ -7,6 +7,26 @@
   background: transparent;
 }
 
+.squircle-scene-root {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+.squircle-scene-frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+.squircle-scene-frame > .squircle-scene {
+  position: relative;
+  z-index: 0;
+}
+
 .squircle-scene.sq-theme-dark {
   color-scheme: dark;
 }
@@ -74,4 +94,20 @@
     stroke 250ms ease,
     stroke-width 250ms ease,
     opacity 250ms ease;
+}
+
+.sq-grain-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.sq-grain-overlay rect {
+  transition: opacity var(--sq-transition-ms, 220ms) ease;
 }

@@ -5,7 +5,7 @@ export const PAGE_LAYER_GAP = 88;
 export const PAGE_PALETTES = SQUIRCLE_PALETTE_IDS;
 
 const materials: SquircleMaterial[] = ["wireframe", "solid", "transparent"];
-const effects = ["off", "metal"] as const satisfies readonly SquircleEffect[];
+const effects = ["off", "metal", "mesh"] as const satisfies readonly SquircleEffect[];
 const labels = ["GPU", "CUDA", "AI", "{}"];
 
 export interface CompositionPreset {
@@ -42,11 +42,15 @@ export function createSingleStatePresets(paletteId: string): CompositionPreset[]
     { material: "solid", paletteId, text: "GPU", textStyle: "wireframe" },
     { material: "solid", paletteId, line: "solid" },
     { material: "solid", paletteId, text: "GPU", textStyle: "solid", line: "dotted" },
-    { material: "solid", paletteId, effect: "metal", text: "GPU", textStyle: "solid", line: "dashed" },
+    { material: "solid", paletteId, grain: true },
+    { material: "solid", paletteId, effect: "metal", grain: true, text: "GPU", textStyle: "solid", line: "dashed" },
+    { material: "solid", paletteId, effect: "mesh", grain: true, text: "{}", textStyle: "wireframe", line: "solid" },
     { material: "transparent", paletteId },
     { material: "transparent", paletteId, text: "GPU", textStyle: "solid" },
     { material: "transparent", paletteId, text: "GPU", textStyle: "wireframe", line: "dotted" },
-    { material: "transparent", paletteId, effect: "metal", text: "AI", textStyle: "solid", line: "dashed" },
+    { material: "transparent", paletteId, grain: true },
+    { material: "transparent", paletteId, effect: "metal", grain: true, text: "AI", textStyle: "solid", line: "dashed" },
+    { material: "transparent", paletteId, effect: "mesh", grain: true, text: "CUDA", textStyle: "wireframe", line: "solid" },
     { material: "wireframe", paletteId },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "solid" },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe" },
@@ -139,6 +143,7 @@ function createVariant(index: number, paletteId: string, layerIndex: number): Sq
     material,
     paletteId,
     effect: materialSupportsEffect(material) ? effects[index % effects.length] : undefined,
+    grain: materialSupportsEffect(material) && (index + layerIndex) % 5 === 0,
     text: withText ? labels[(index + layerIndex) % labels.length] : false,
     textStyle,
     line
@@ -160,6 +165,7 @@ function hoverFor(base: SquircleVariantConfig, index: number, paletteId = base.p
 function singleName(base: SquircleVariantConfig): string {
   const pieces: string[] = [base.material ?? "wireframe"];
   if (base.effect && base.effect !== "off") pieces.push(base.effect);
+  if (base.grain) pieces.push("grain");
   if (base.text) pieces.push("text");
   if (base.line) pieces.push(`${base.line} line`);
   if (base.textStyle === "wireframe") pieces.push("outlined");
@@ -168,14 +174,16 @@ function singleName(base: SquircleVariantConfig): string {
 
 function singleNote(base: SquircleVariantConfig): string {
   const effect = base.effect && base.effect !== "off" ? ` / ${base.effect}` : "";
+  const grain = base.grain ? " / grain" : "";
   const text = base.text ? `text ${base.textStyle ?? "solid"}` : "no text";
   const line = base.line ? `${base.line} line` : "no line";
-  return `${base.material ?? "wireframe"}${effect} / ${text} / ${line}`;
+  return `${base.material ?? "wireframe"}${effect}${grain} / ${text} / ${line}`;
 }
 
 function summary(base: SquircleVariantConfig): string {
   const parts: string[] = [base.material ?? "wireframe"];
   if (base.effect && base.effect !== "off") parts.push(base.effect);
+  if (base.grain) parts.push("grain");
   if (base.text) parts.push("text");
   if (base.line) parts.push(`${base.line}-line`);
   return parts.join("+");

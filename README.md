@@ -9,7 +9,7 @@ Squircle is a React/TypeScript renderer for precise isometric squircle-prism SVG
 Use this repo when you need:
 
 - `SquircleScene`: a configurable SVG renderer for 0-N squircle layers.
-- A documented visual system for squircle geometry, gradients, wireframes, top-plane text, and top-plane line inlays.
+- A documented visual system for squircle geometry, gradients, wireframes, top-plane text, top-plane line inlays, and subtle surface grain.
 - React-backed local examples for regression checks and agent handoff.
 
 ## Package
@@ -69,6 +69,7 @@ const layers: SquircleLayerConfig[] = [
       material: "solid",
       paletteId: "15",
       effect: "metal",
+      grain: true,
       text: "GPU",
       line: "dashed"
     },
@@ -151,7 +152,8 @@ Each layer has a required `base` variant plus an optional `hover` variant. `hove
 | --- | --- | --- | --- |
 | `material` | `solid`, `transparent`, `wireframe` | `wireframe` | Prism rendering mode. |
 | `paletteId` | `13` through `20` | `15` | Palette from `SQUIRCLE_PALETTES`. |
-| `effect` | `off`, `metal` | `off` | Top-face surface effect for solid and transparent materials. Ignored by wireframe material. |
+| `effect` | `off`, `metal`, `mesh` | `off` | Top-face surface effect for solid and transparent materials. Ignored by wireframe material. |
+| `grain` | `boolean` | `false` | Adds subtle multiply-blended surface grain clipped to the top face for solid and transparent materials. Ignored by wireframe material. |
 | `text` | `string`, `false` | none | Render top-plane text. Pass a string such as `"GPU"` or `"{}"`; pass `false` in a hover variant to hide inherited text. |
 | `line` | `solid`, `dotted`, `dashed`, `false` | `false` | Render a top-plane inner line. |
 | `textStyle` | `solid`, `wireframe` | `solid` | Filled or outlined text. |
@@ -229,13 +231,15 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face, with the color field authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected alpha palette.
+`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected alpha palette. `grain: true` can be combined with `off`, `metal`, or `mesh`.
 
 ## Surface Effects
 
-Solid and transparent squircles can opt into an animated top-surface effect with `effect: "metal"`. The effect keeps the prism geometry fixed: only the top face paint changes. Transparent effects keep the material's `transparentFace` opacity on the animated color field.
+Solid and transparent squircles can opt into animated top-surface effects with `effect: "metal"` or `effect: "mesh"`. Effects keep the prism geometry fixed: only the top face paint changes. Transparent effects keep the material's `transparentFace` opacity on the animated color field.
 
 The color field is built in the flat squircle plane, blurred in that local coordinate system, and then projected onto the top face. The generated top polygon remains the screen-space clip path. This keeps the gradients reading as surface paint instead of flat circles floating above the prism.
+
+`grain: true` adds a sibling SVG overlay, clipped to the same generated top polygon, with `feTurbulence` grain blended by CSS `multiply`. It is intentionally separate from `effect`, so grain can sit over the static top gradient, metal, or mesh without changing geometry.
 
 Use [Rendering Contract](docs/design/rendering.md) for the exact ratios and SVG nesting rules before changing these effects.
 
@@ -290,5 +294,6 @@ Start at [Documentation Index](docs/README.md). The docs are split by purpose:
 - Render top-plane text as one SVG text element on the projected top plane. Do not duplicate it for filled and wireframe states.
 - Keep variant colors synchronized with [Color System](docs/design/colors.md).
 - Keep animated top effects clipped to the generated full-resolution top polygon; annotations still draw above the effect.
-- Keep metal color fields in local top-plane coordinates before projection; do not place their blobs directly in screen space.
+- Keep animated color fields in local top-plane coordinates before projection; do not place metal blobs or mesh gradients directly in screen space.
+- Keep grain as a clipped sibling overlay using the documented mult-hard constants; do not move it into the prism geometry without updating the rendering contract.
 - Keep the body background transparent.

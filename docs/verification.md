@@ -27,14 +27,16 @@ Open the Vite dev server and inspect:
 - `/index.html`: hero scene renders through React, palette buttons recolor it, and the single-state drawer can select a state.
 - `/demo.html`: gallery renders many React-generated presets, clicking a preset updates the main scene, and hovering a squircle swaps only material/color state.
 - `/events.html`: focused sibling-hover demo renders one three-layer scene, palette buttons recolor it, and function-valued `layer.hover` crossfades non-hovered layers to wireframe.
-- `/constructor.html`: editor renders three default plain wireframe layers, supports layer add/delete/reorder/visibility, click selection, inspector deselection, theme switching, scene camera controls, per-layer geometry controls, palette controls, effect controls, stroke controls, and generated React code copy.
+- `/constructor.html`: editor renders three default plain wireframe layers, supports layer add/delete/reorder/visibility, click selection, inspector deselection, theme switching, scene camera controls, per-layer geometry controls, palette controls, effect controls, grain controls, stroke controls, and generated React code copy.
 - `/react.html`: mirrors the constructor page for compatibility.
 
 Expected results:
 
 - No page renders all-black squircles.
-- Solid and transparent `metal` effects are clipped to the top face and animate without moving layer geometry.
+- Solid and transparent `metal` and `mesh` effects are clipped to the top face and animate without moving layer geometry.
+- Solid and transparent `grain: true` variants show subtle multiply-blended grain only inside the top face, not across the scene background.
 - Solid and transparent `metal` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
+- Solid and transparent `mesh` effects look like a smooth four-corner bilinear gradient; no hotspots, blobs, waves, or noise are visible.
 - Geometry stays fixed when selection or hover changes.
 - Camera level affects the whole scene and serializes as `geometry.angleDegrees`.
 - Radius, height, and line-size edits affect only the selected layer and serialize into that layer's `geometry` object.

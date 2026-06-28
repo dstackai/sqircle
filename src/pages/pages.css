@@ -178,7 +178,8 @@ select {
   min-height: 520px;
 }
 
-.sq-stage .squircle-scene {
+.sq-stage .squircle-scene,
+.sq-stage .squircle-scene-root {
   width: min(100%, 720px);
 }
 
@@ -276,7 +277,8 @@ select {
   text-align: left;
 }
 
-.sq-variant-button .squircle-scene {
+.sq-variant-button .squircle-scene,
+.sq-variant-button .squircle-scene-root {
   width: 100%;
   pointer-events: none;
 }

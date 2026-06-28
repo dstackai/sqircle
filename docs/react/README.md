@@ -22,7 +22,7 @@ The maintainable renderer implementation lives in `src/squircle`. The root HTML 
       id: "bottom",
       offset: { y: 176 },
       base: { material: "wireframe", paletteId: "15" },
-      hover: { material: "solid", paletteId: "20", effect: "metal" },
+      hover: { material: "solid", paletteId: "20", effect: "metal", grain: true },
       stroke: { wire: 1.6, face: 0.35, labelWire: 1.1 }
     }
   ]}
@@ -135,7 +135,8 @@ Each layer has a required `base` variant plus an optional `hover` variant. `hove
 | --- | --- | --- | --- |
 | `material` | `solid`, `transparent`, `wireframe` | `wireframe` | Prism rendering mode. |
 | `paletteId` | `13` through `20` | `15` | Palette from `SQUIRCLE_PALETTES`. |
-| `effect` | `off`, `metal` | `off` | Top-face surface effect for solid and transparent materials. Ignored by wireframe material. |
+| `effect` | `off`, `metal`, `mesh` | `off` | Top-face surface effect for solid and transparent materials. Ignored by wireframe material. |
+| `grain` | `boolean` | `false` | Adds subtle multiply-blended surface grain clipped to the top face for solid and transparent materials. Ignored by wireframe material. |
 | `text` | `string`, `false` | none | Render top-plane text. Pass a string such as `"GPU"` or `"{}"`; pass `false` in a hover variant to hide inherited text. |
 | `line` | `solid`, `dotted`, `dashed`, `false` | `false` | Render a top-plane inner line. |
 | `textStyle` | `solid`, `wireframe` | `solid` | Filled or outlined text. |
@@ -213,7 +214,7 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face, but the fields are authored in the flat squircle plane and projected with the same isometric matrix as text. Effect colors are derived from the selected alpha palette. On `material: "transparent"`, the animated color field keeps `transparentFace` opacity.
+`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in the flat squircle plane and projected with the same isometric matrix as text. Effect colors are derived from the selected alpha palette. On `material: "transparent"`, the animated color field keeps `transparentFace` opacity. `grain: true` can be combined with any filled effect and renders as a clipped multiply-blended sibling overlay.
 
 ## Stroke Parameters
 
@@ -282,5 +283,7 @@ Then open `/index.html`, `/demo.html`, and `/events.html` from the Vite dev serv
 - hover behavior is configured through `layer.hover`, including sibling layer changes.
 - `/events.html` demonstrates the minimal function-hover sibling pattern.
 - wireframe text outline uses the text-local gradient, not a single-stroke replacement.
-- solid and transparent palettes can switch between `off` and `metal` without moving geometry or annotations.
+- solid and transparent palettes can switch between `off`, `metal`, and `mesh` without moving geometry or annotations.
+- `grain: true` stays clipped to the selected top face and does not grain the scene background.
 - `metal` reads as a smooth projected surface field, not as visible screen-space circles.
+- `mesh` reads as a smooth four-corner surface blend, not as blobs, waves, or a hotspot.

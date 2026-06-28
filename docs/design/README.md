@@ -13,7 +13,7 @@ Read these files when changing how a squircle looks. They are visual contracts s
 
 - Geometry is generated from math, not hand-edited point lists.
 - Filled faces use user-space gradients plus tiny in-family edge strokes.
-- Solid and transparent faces can use `off` or `metal` top-surface effects without moving geometry.
+- Solid and transparent faces can use `off`, `metal`, or `mesh` top-surface effects without moving geometry, and can add clipped surface grain with `grain: true`.
 - Wireframe faces use gradient strokes with matching top and bottom curves.
 - React top-plane text is one live SVG text element in every mode. Static fixtures keep a single compound `GPU` path for their fixed example.
 - Solid/transparent annotations use automatic palette colors; wireframe annotations use wire gradients.
