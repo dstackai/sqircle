@@ -231,7 +231,7 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected alpha palette. `grain: true` can be combined with `off`, `metal`, or `mesh`.
+`effect: "off"` uses the normal static top gradient. `metal` clips animated color fields to the top face. Chrome/Firefox keep the original SVG-blur metal backend; Safari/iOS use a no-filter soft-blob backend for performance. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected alpha palette. `grain: true` can be combined with `off`, `metal`, or `mesh`.
 
 ## Surface Effects
 

@@ -25,10 +25,10 @@ Wireframe mode uses the top gradient as the stroke gradient so upper and lower c
 | Effect | Rendering |
 | --- | --- |
 | `off` | A static top polygon filled by the resolved top gradient. This is the default. |
-| `metal` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
+| `metal` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus moving soft color blobs. Chrome/Firefox use the original SVG Gaussian-blur backend; Safari/iOS use a radial-gradient blob backend to avoid per-frame SVG filter rasterization. No displacement map is used. |
 | `mesh` | A full-resolution top-face `clipPath` containing a projected four-corner bilinear gradient. The four corner colors are sampled from `palette.top` and slowly exchange along diagonal pairs. No blobs, hotspots, noise, turbulence, or internal wave figures are used. |
 
-The moving effects are interval-driven inside `SquircleScene`; they do not query the global DOM and they do not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` or `mesh` state.
+The moving effects are driven by a shared, throttled `requestAnimationFrame` clock inside `SquircleScene`. The clock mutates SVG attributes through refs instead of setting React state per frame, pauses when `document.hidden`, and scenes unsubscribe while offscreen through `IntersectionObserver`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` or `mesh` state.
 
 Effect color layers are authored in the flat top-face local coordinate system, not in screen coordinates. Local `(0, 0)` is the center of the raw superellipse, and local `a` is `geometry.config.halfSize`. The whole color field is then wrapped in the same isometric matrix used by labels:
 
@@ -37,6 +37,12 @@ matrix(cosA, sinA, -cosA, sinA, cx, cy - h)
 ```
 
 For `metal`, circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon.
+
+Metal backend rules:
+
+- Non-Safari browsers use `sq-top-effect-metal-blur`: hard color circles inside the original SVG `feGaussianBlur` filters, preserving the original Chrome/Firefox look.
+- Safari and iOS use `sq-top-effect-metal-soft`: larger radial-gradient circles, no SVG filter, and no `mix-blend-mode`. This keeps the moving metal field while avoiding Safari's expensive animated SVG blur path.
+- Backend selection is internal; public config remains `effect: "metal"`.
 
 For `mesh`, the top row is a local horizontal gradient from top-left to top-right, the bottom row is a local horizontal gradient from bottom-left to bottom-right, and a local vertical mask crossfades the top row over the bottom row. The result is a true bilinear blend across the projected plane. Corner home levels are sampled from `palette.top` at `0`, `0.33`, `0.66`, and `1`; diagonal pairs exchange over staggered timers, so the palette is conserved while the corner assignment changes.
 
@@ -62,15 +68,17 @@ Effect scale is always derived from `W = 2 * a`, the local top-plane width, not 
 - Blob centers are allowed to sit outside `+-a` so every frame heavily overlaps and overfills the clipped face.
 - The base rectangle covers `+-1.3a`, so the face never shows gaps between blobs.
 
-The blur filters use `filterUnits="userSpaceOnUse"` and `primitiveUnits="userSpaceOnUse"` with a local filter region centered around `(0, 0)`. If `halfSize` changes, blob radii, blur, positions, base rect, and motion amplitudes must all scale from `a` or `W` together. Scaling only some of them makes the blobs collapse into visible circles.
+The blur filters used by the non-Safari metal backend use `filterUnits="userSpaceOnUse"` and `primitiveUnits="userSpaceOnUse"` with a local filter region centered around `(0, 0)`. If `halfSize` changes, blob radii, blur, positions, base rect, and motion amplitudes must all scale from `a` or `W` together. Scaling only some of them makes the blobs collapse into visible circles.
 
 Effect invariants:
 
 - The clip path uses the same generated `topPoints` polygon as the normal top face.
 - Metal color blobs must never be placed directly in screen coordinates.
 - Metal must not use `feDisplacementMap`; it turns the smooth surface field into raster clouds.
+- Safari/iOS metal must not use animated SVG blur filters or blend modes.
 - Mesh must stay a four-corner bilinear blend. Do not add radial gradients, spotlights, noise, turbulence, or wave structure.
 - Mesh corner colors must be sampled from `palette.top`, and the four sampled levels must remain conserved during animation.
+- Mesh animation should update existing gradient stop colors through refs, not trigger React scene re-renders per frame.
 - Transparent material applies `transparentFace` opacity to the animated color field so effects do not make the top face fully opaque.
 - Annotations render after the effect, so text and line stay readable and stay glued to the top plane.
 - Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.

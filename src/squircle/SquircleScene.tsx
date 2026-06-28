@@ -54,9 +54,10 @@ const GRAIN_BASE_FREQUENCY = 2.4;
 const GRAIN_OCTAVES = 3;
 const GRAIN_CONTRAST_SLOPE = 2.2;
 const GRAIN_CONTRAST_INTERCEPT = -0.22;
-const MOTION_INTERVAL_MS = 33;
+const MOTION_FRAME_MS = 50;
 const motionClockSubscribers = new Set<(time: number) => void>();
-let motionClockInterval: number | null = null;
+let motionClockFrame: number | null = null;
+let motionClockLastTime = 0;
 
 const METAL_BASE_BLOBS = [
   { x: -1.12, y: -1.04, r: 0.48, slot: 0, i: 0, sp: 0.95, ax: 0.23, ay: 0.21, ar: 0.018 },
@@ -142,6 +143,8 @@ type ViewBox = {
   height: number;
 };
 
+type MetalBackend = "blur" | "soft";
+
 export function SquircleScene({
   layers,
   geometry,
@@ -207,7 +210,10 @@ export function SquircleScene({
     const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
     return variantHasAnimatedSurface(hoverVariant);
   });
-  const motionTime = useMotionTime(motionEnabled);
+  const [sceneInView, setSceneInView] = useState(true);
+  const metalBackend = useMemo(detectMetalBackend, []);
+  const motionActive = motionEnabled && sceneInView;
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const grainOverlays = useMemo(() => createGrainOverlays({
     layerModels,
     hoverMap,
@@ -225,6 +231,23 @@ export function SquircleScene({
       window.clearTimeout(resolvedHoverClearTimerRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (!motionEnabled || typeof IntersectionObserver === "undefined") {
+      setSceneInView(true);
+      return undefined;
+    }
+
+    const target = frameRef.current ?? svgRef.current;
+    if (!target) return undefined;
+
+    const observer = new IntersectionObserver((entries) => {
+      setSceneInView(entries.some((entry) => entry.isIntersecting));
+    }, { rootMargin: "120px" });
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, [motionEnabled, shouldUseGrainWrapper]);
 
   const handleClick = onLayerClick
     ? (event: ReactMouseEvent<SVGSVGElement>) => {
@@ -332,7 +355,8 @@ export function SquircleScene({
           hover={hoverMap.get(layer.id) ?? null}
           geometry={layerGeometry}
           prefix={layerPrefix}
-          motionTime={motionTime}
+          motionEnabled={motionActive}
+          metalBackend={metalBackend}
           selected={selectedLayerId === layer.id}
         />
       ))}
@@ -343,7 +367,7 @@ export function SquircleScene({
 
   return (
     <div className={["squircle-scene-root", className].filter(Boolean).join(" ")} style={sceneStyle}>
-      <div className="squircle-scene-frame">
+      <div className="squircle-scene-frame" ref={frameRef}>
         {sceneSvg}
         {hasGrainOverlay ? <GrainOverlay prefix={prefix} overlays={grainOverlays} /> : null}
       </div>
@@ -401,42 +425,49 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
       >
         <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
-      {Object.values(SQUIRCLE_PALETTES).map((palette) => (
-        <g key={palette.id}>
-          <LinearGradient
-            id={`${prefix}-top-${palette.id}`}
-            x1={geometry.topBounds.minX}
-            y1={geometry.topBounds.minY}
-            x2={geometry.topBounds.maxX}
-            y2={geometry.topBounds.maxY}
-            stops={palette.top}
-          />
-          <LinearGradient
-            id={`${prefix}-side-${palette.id}`}
-            x1={geometry.sideBounds.minX}
-            y1={geometry.sideBounds.minY}
-            x2={geometry.sideBounds.maxX}
-            y2={geometry.sideBounds.maxY}
-            stops={palette.side}
-          />
-          <LinearGradient
-            id={`${prefix}-text-surface-${palette.id}`}
-            x1={-425.63}
-            y1={-0.1}
-            x2={425.6}
-            y2={0.07}
-            stops={palette.top}
-          />
-          <LinearGradient
-            id={`${prefix}-text-wire-${palette.id}`}
-            x1={-64}
-            y1={-24}
-            x2={64}
-            y2={24}
-            stops={palette.textWire}
-          />
-        </g>
-      ))}
+      {Object.values(SQUIRCLE_PALETTES).map((palette) => {
+        const effectColors = alphaPaletteEffectColors(palette);
+
+        return (
+          <g key={palette.id}>
+            <LinearGradient
+              id={`${prefix}-top-${palette.id}`}
+              x1={geometry.topBounds.minX}
+              y1={geometry.topBounds.minY}
+              x2={geometry.topBounds.maxX}
+              y2={geometry.topBounds.maxY}
+              stops={palette.top}
+            />
+            <LinearGradient
+              id={`${prefix}-side-${palette.id}`}
+              x1={geometry.sideBounds.minX}
+              y1={geometry.sideBounds.minY}
+              x2={geometry.sideBounds.maxX}
+              y2={geometry.sideBounds.maxY}
+              stops={palette.side}
+            />
+            <LinearGradient
+              id={`${prefix}-text-surface-${palette.id}`}
+              x1={-425.63}
+              y1={-0.1}
+              x2={425.6}
+              y2={0.07}
+              stops={palette.top}
+            />
+            <LinearGradient
+              id={`${prefix}-text-wire-${palette.id}`}
+              x1={-64}
+              y1={-24}
+              x2={64}
+              y2={24}
+              stops={palette.textWire}
+            />
+            {effectColors.map((color, index) => (
+              <SoftRadialGradient key={`${palette.id}-${index}`} id={`${prefix}-soft-${palette.id}-${index}`} color={color} />
+            ))}
+          </g>
+        );
+      })}
     </defs>
   );
 }
@@ -465,19 +496,31 @@ function LinearGradient({
   );
 }
 
+function SoftRadialGradient({ id, color }: { id: string; color: string }) {
+  return (
+    <radialGradient id={id} cx="50%" cy="50%" r="50%">
+      <stop offset="0" stopColor={color} stopOpacity={1} />
+      <stop offset="0.58" stopColor={color} stopOpacity={0.72} />
+      <stop offset="1" stopColor={color} stopOpacity={0} />
+    </radialGradient>
+  );
+}
+
 function SquircleLayer({
   layer,
   hover,
   geometry,
   prefix,
-  motionTime,
+  motionEnabled,
+  metalBackend,
   selected
 }: {
   layer: SquircleLayerConfig;
   hover: RenderHoverConfig | null;
   geometry: ReturnType<typeof createSquircleGeometry>;
   prefix: string;
-  motionTime: number;
+  motionEnabled: boolean;
+  metalBackend: MetalBackend;
   selected: boolean;
 }) {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
@@ -503,8 +546,8 @@ function SquircleLayer({
       data-hover-visible={String(controlledHoverEnabled)}
       transform={`translate(${x} ${y})`}
     >
-      <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionTime={motionTime} />
-      {hasHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionTime={motionTime} /> : null}
+      <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} />
+      {hasHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} /> : null}
     </g>
   );
 }
@@ -598,13 +641,15 @@ function SquircleVariant({
   variant,
   geometry,
   prefix,
-  motionTime
+  motionEnabled,
+  metalBackend
 }: {
   className: string;
   variant: ResolvedVariant;
   geometry: ReturnType<typeof createSquircleGeometry>;
   prefix: string;
-  motionTime: number;
+  motionEnabled: boolean;
+  metalBackend: MetalBackend;
 }) {
   const palette = getRenderPalette(variant.paletteId);
   const topFill = `url(#${prefix}-top-${palette.id})`;
@@ -664,7 +709,8 @@ function SquircleVariant({
             topClipId={topClipId}
             topFill={topFill}
             topPoints={topPoints}
-            motionTime={motionTime}
+            motionEnabled={motionEnabled}
+            metalBackend={metalBackend}
           />
         </>
       )}
@@ -705,7 +751,8 @@ function SolidTopFace({
   topClipId,
   topFill,
   topPoints,
-  motionTime
+  motionEnabled,
+  metalBackend
 }: {
   variant: ResolvedVariant;
   palette: RenderPalette;
@@ -714,64 +761,24 @@ function SolidTopFace({
   topClipId: string;
   topFill: string;
   topPoints: string;
-  motionTime: number;
+  motionEnabled: boolean;
+  metalBackend: MetalBackend;
 }) {
-  const meshUid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const fillOpacity = variant.material === "transparent" ? variant.opacity.transparentFace : 1;
   const effect = variant.material === "wireframe" ? "off" : variant.effect;
   const effectOpacity = variant.material === "transparent" ? fillOpacity : 1;
-  const halfSize = geometry.config.halfSize;
-  const baseRect = {
-    x: -halfSize * 1.3,
-    y: -halfSize * 1.3,
-    size: halfSize * 2.6
-  };
 
   if (effect === "mesh") {
-    const alpha = 0.5 - 0.5 * Math.cos(0.6 * motionTime);
-    const beta = 0.5 - 0.5 * Math.cos(0.43 * motionTime + 1.1);
-    const homeBL = 0;
-    const homeBR = 0.66;
-    const homeTR = 1;
-    const homeTL = 0.33;
-    const levelBL = homeBL + (homeTR - homeBL) * alpha;
-    const levelTR = homeTR + (homeBL - homeTR) * alpha;
-    const levelBR = homeBR + (homeTL - homeBR) * beta;
-    const levelTL = homeTL + (homeBR - homeTL) * beta;
-    const colorTL = sampleStops(palette.top, levelTL);
-    const colorTR = sampleStops(palette.top, levelTR);
-    const colorBL = sampleStops(palette.top, levelBL);
-    const colorBR = sampleStops(palette.top, levelBR);
-    const topRowId = `${prefix}-mesh-top-${meshUid}`;
-    const bottomRowId = `${prefix}-mesh-bottom-${meshUid}`;
-    const maskGradientId = `${prefix}-mesh-mask-gradient-${meshUid}`;
-    const maskId = `${prefix}-mesh-mask-${meshUid}`;
-
     return (
       <>
-        <g className="sq-top-effect sq-top-effect-mesh" clipPath={`url(#${topClipId})`} opacity={effectOpacity}>
-          <defs>
-            <linearGradient id={topRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
-              <stop offset="0" stopColor={colorTL} />
-              <stop offset="1" stopColor={colorTR} />
-            </linearGradient>
-            <linearGradient id={bottomRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
-              <stop offset="0" stopColor={colorBL} />
-              <stop offset="1" stopColor={colorBR} />
-            </linearGradient>
-            <linearGradient id={maskGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={-halfSize} x2={0} y2={halfSize}>
-              <stop offset="0" stopColor="#ffffff" />
-              <stop offset="1" stopColor="#000000" />
-            </linearGradient>
-            <mask id={maskId} maskUnits="userSpaceOnUse" x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size}>
-              <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${maskGradientId})`} />
-            </mask>
-          </defs>
-          <g transform={geometry.labelTransform}>
-            <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${bottomRowId})`} />
-            <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${topRowId})`} mask={`url(#${maskId})`} />
-          </g>
-        </g>
+        <MeshTopSurface
+          palette={palette}
+          geometry={geometry}
+          prefix={prefix}
+          topClipId={topClipId}
+          opacity={effectOpacity}
+          motionEnabled={motionEnabled}
+        />
         <polygon
           className="sq-face sq-solid-top sq-effect-outline"
           points={topPoints}
@@ -787,27 +794,15 @@ function SolidTopFace({
   if (effect === "metal") {
     return (
       <>
-        <g className="sq-top-effect sq-top-effect-metal" clipPath={`url(#${topClipId})`} opacity={effectOpacity}>
-          <g transform={geometry.labelTransform}>
-            <rect
-              x={baseRect.x}
-              y={baseRect.y}
-              width={baseRect.size}
-              height={baseRect.size}
-              fill={palette.effectColors[3]}
-            />
-            <g filter={`url(#${prefix}-metal-main-blur)`}>
-              {METAL_BASE_BLOBS.map((blob) => (
-                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-              ))}
-            </g>
-            <g filter={`url(#${prefix}-metal-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
-              {METAL_LIGHT_BLOBS.map((blob) => (
-                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-              ))}
-            </g>
-          </g>
-        </g>
+        <MetalTopSurface
+          palette={palette}
+          geometry={geometry}
+          prefix={prefix}
+          topClipId={topClipId}
+          opacity={effectOpacity}
+          motionEnabled={motionEnabled}
+          backend={metalBackend}
+        />
         <polygon
           className="sq-face sq-solid-top sq-effect-outline"
           points={topPoints}
@@ -833,11 +828,172 @@ function SolidTopFace({
   );
 }
 
-function MotionBlob({
-  blob,
+function MeshTopSurface({
   palette,
   geometry,
-  motionTime
+  prefix,
+  topClipId,
+  opacity,
+  motionEnabled
+}: {
+  palette: RenderPalette;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  prefix: string;
+  topClipId: string;
+  opacity: number;
+  motionEnabled: boolean;
+}) {
+  const meshUid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const topStartRef = useRef<SVGStopElement | null>(null);
+  const topEndRef = useRef<SVGStopElement | null>(null);
+  const bottomStartRef = useRef<SVGStopElement | null>(null);
+  const bottomEndRef = useRef<SVGStopElement | null>(null);
+  const halfSize = geometry.config.halfSize;
+  const baseRect = createEffectBaseRect(halfSize);
+  const initialColors = meshColors(palette, 0);
+  const topRowId = `${prefix}-mesh-top-${meshUid}`;
+  const bottomRowId = `${prefix}-mesh-bottom-${meshUid}`;
+  const maskGradientId = `${prefix}-mesh-mask-gradient-${meshUid}`;
+  const maskId = `${prefix}-mesh-mask-${meshUid}`;
+
+  useMotionFrame(motionEnabled, (time) => {
+    const colors = meshColors(palette, time);
+    topStartRef.current?.setAttribute("stop-color", colors.tl);
+    topEndRef.current?.setAttribute("stop-color", colors.tr);
+    bottomStartRef.current?.setAttribute("stop-color", colors.bl);
+    bottomEndRef.current?.setAttribute("stop-color", colors.br);
+  });
+
+  return (
+    <g className="sq-top-effect sq-top-effect-mesh" clipPath={`url(#${topClipId})`} opacity={opacity}>
+      <defs>
+        <linearGradient id={topRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
+          <stop ref={topStartRef} offset="0" stopColor={initialColors.tl} />
+          <stop ref={topEndRef} offset="1" stopColor={initialColors.tr} />
+        </linearGradient>
+        <linearGradient id={bottomRowId} gradientUnits="userSpaceOnUse" x1={-halfSize} y1={0} x2={halfSize} y2={0}>
+          <stop ref={bottomStartRef} offset="0" stopColor={initialColors.bl} />
+          <stop ref={bottomEndRef} offset="1" stopColor={initialColors.br} />
+        </linearGradient>
+        <linearGradient id={maskGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={-halfSize} x2={0} y2={halfSize}>
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="1" stopColor="#000000" />
+        </linearGradient>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size}>
+          <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${maskGradientId})`} />
+        </mask>
+      </defs>
+      <g transform={geometry.labelTransform}>
+        <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${bottomRowId})`} />
+        <rect x={baseRect.x} y={baseRect.y} width={baseRect.size} height={baseRect.size} fill={`url(#${topRowId})`} mask={`url(#${maskId})`} />
+      </g>
+    </g>
+  );
+}
+
+function MetalTopSurface({
+  palette,
+  geometry,
+  prefix,
+  topClipId,
+  opacity,
+  motionEnabled,
+  backend
+}: {
+  palette: RenderPalette;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  prefix: string;
+  topClipId: string;
+  opacity: number;
+  motionEnabled: boolean;
+  backend: MetalBackend;
+}) {
+  const halfSize = geometry.config.halfSize;
+  const baseRect = createEffectBaseRect(halfSize);
+
+  if (backend === "soft") {
+    return (
+      <g className="sq-top-effect sq-top-effect-metal sq-top-effect-metal-soft" clipPath={`url(#${topClipId})`} opacity={opacity}>
+        <g transform={geometry.labelTransform}>
+          <rect
+            x={baseRect.x}
+            y={baseRect.y}
+            width={baseRect.size}
+            height={baseRect.size}
+            fill={palette.effectColors[3]}
+          />
+          <g>
+            {METAL_BASE_BLOBS.map((blob) => (
+              <MotionBlob
+                key={blob.i}
+                blob={blob}
+                fill={`url(#${prefix}-soft-${palette.id}-${blob.slot})`}
+                geometry={geometry}
+                motionEnabled={motionEnabled}
+                radiusScale={1.44}
+              />
+            ))}
+          </g>
+          <g opacity={0.46}>
+            {METAL_LIGHT_BLOBS.map((blob) => (
+              <MotionBlob
+                key={blob.i}
+                blob={blob}
+                fill={`url(#${prefix}-soft-${palette.id}-${blob.slot})`}
+                geometry={geometry}
+                motionEnabled={motionEnabled}
+                radiusScale={1.32}
+              />
+            ))}
+          </g>
+        </g>
+      </g>
+    );
+  }
+
+  return (
+    <g className="sq-top-effect sq-top-effect-metal sq-top-effect-metal-blur" clipPath={`url(#${topClipId})`} opacity={opacity}>
+      <g transform={geometry.labelTransform}>
+        <rect
+          x={baseRect.x}
+          y={baseRect.y}
+          width={baseRect.size}
+          height={baseRect.size}
+          fill={palette.effectColors[3]}
+        />
+        <g filter={`url(#${prefix}-metal-main-blur)`}>
+          {METAL_BASE_BLOBS.map((blob) => (
+            <MotionBlob
+              key={blob.i}
+              blob={blob}
+              fill={palette.effectColors[blob.slot] ?? palette.effectColors[3]}
+              geometry={geometry}
+              motionEnabled={motionEnabled}
+            />
+          ))}
+        </g>
+        <g filter={`url(#${prefix}-metal-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
+          {METAL_LIGHT_BLOBS.map((blob) => (
+            <MotionBlob
+              key={blob.i}
+              blob={blob}
+              fill={palette.effectColors[blob.slot] ?? palette.effectColors[3]}
+              geometry={geometry}
+              motionEnabled={motionEnabled}
+            />
+          ))}
+        </g>
+      </g>
+    </g>
+  );
+}
+
+function MotionBlob({
+  blob,
+  fill,
+  geometry,
+  motionEnabled,
+  radiusScale = 1
 }: {
   blob: {
     x: number;
@@ -850,28 +1006,39 @@ function MotionBlob({
     ay: number;
     ar: number;
   };
-  palette: RenderPalette;
+  fill: string;
   geometry: ReturnType<typeof createSquircleGeometry>;
-  motionTime: number;
+  motionEnabled: boolean;
+  radiusScale?: number;
 }) {
+  const ref = useRef<SVGCircleElement | null>(null);
   const halfSize = geometry.config.halfSize;
   const planeWidth = halfSize * 2;
   const x = halfSize * blob.x;
   const y = halfSize * blob.y;
-  const radius = planeWidth * blob.r;
+  const radius = planeWidth * blob.r * radiusScale;
   const ax = planeWidth * blob.ax;
   const ay = planeWidth * blob.ay;
-  const ar = planeWidth * blob.ar;
-  const cx = x + ax * Math.sin(motionTime * 0.62 * blob.sp + blob.i * 1.7) + 0.5 * ax * Math.cos(motionTime * 0.4 * blob.sp + blob.i * 0.6);
-  const cy = y + ay * Math.cos(motionTime * 0.55 * blob.sp + blob.i * 2.1) + 0.55 * ay * Math.sin(motionTime * 0.34 * blob.sp + blob.i);
-  const r = Math.max(4, radius + ar * Math.sin(motionTime * 0.8 + blob.i * 1.2));
+  const ar = planeWidth * blob.ar * radiusScale;
+  const initial = motionBlobFrame({ blob, x, y, radius, ax, ay, ar, time: 0 });
+
+  useMotionFrame(motionEnabled, (time) => {
+    const element = ref.current;
+    if (!element) return;
+
+    const frame = motionBlobFrame({ blob, x, y, radius, ax, ay, ar, time });
+    element.setAttribute("cx", String(frame.cx));
+    element.setAttribute("cy", String(frame.cy));
+    element.setAttribute("r", String(frame.r));
+  });
 
   return (
     <circle
-      cx={roundNumber(cx)}
-      cy={roundNumber(cy)}
-      r={roundNumber(r)}
-      fill={palette.effectColors[blob.slot] ?? palette.effectColors[3]}
+      ref={ref}
+      cx={initial.cx}
+      cy={initial.cy}
+      r={initial.r}
+      fill={fill}
     />
   );
 }
@@ -992,20 +1159,72 @@ function textPaintProps(
   };
 }
 
+function createEffectBaseRect(halfSize: number) {
+  return {
+    x: -halfSize * 1.3,
+    y: -halfSize * 1.3,
+    size: halfSize * 2.6
+  };
+}
+
+function meshColors(palette: RenderPalette, time: number): { tl: string; tr: string; bl: string; br: string } {
+  const alpha = 0.5 - 0.5 * Math.cos(0.6 * time);
+  const beta = 0.5 - 0.5 * Math.cos(0.43 * time + 1.1);
+  const homeBL = 0;
+  const homeBR = 0.66;
+  const homeTR = 1;
+  const homeTL = 0.33;
+  const levelBL = homeBL + (homeTR - homeBL) * alpha;
+  const levelTR = homeTR + (homeBL - homeTR) * alpha;
+  const levelBR = homeBR + (homeTL - homeBR) * beta;
+  const levelTL = homeTL + (homeBR - homeTL) * beta;
+
+  return {
+    tl: sampleStops(palette.top, levelTL),
+    tr: sampleStops(palette.top, levelTR),
+    bl: sampleStops(palette.top, levelBL),
+    br: sampleStops(palette.top, levelBR)
+  };
+}
+
+function motionBlobFrame({
+  blob,
+  x,
+  y,
+  radius,
+  ax,
+  ay,
+  ar,
+  time
+}: {
+  blob: { sp: number; i: number };
+  x: number;
+  y: number;
+  radius: number;
+  ax: number;
+  ay: number;
+  ar: number;
+  time: number;
+}): { cx: number; cy: number; r: number } {
+  return {
+    cx: roundNumber(x + ax * Math.sin(time * 0.62 * blob.sp + blob.i * 1.7) + 0.5 * ax * Math.cos(time * 0.4 * blob.sp + blob.i * 0.6)),
+    cy: roundNumber(y + ay * Math.cos(time * 0.55 * blob.sp + blob.i * 2.1) + 0.55 * ay * Math.sin(time * 0.34 * blob.sp + blob.i)),
+    r: roundNumber(Math.max(4, radius + ar * Math.sin(time * 0.8 + blob.i * 1.2)))
+  };
+}
+
 function variantSignature(variant: ResolvedVariant): string {
   return JSON.stringify(variant);
 }
 
-function useMotionTime(enabled: boolean): number {
-  const [time, setTime] = useState(0);
+function useMotionFrame(enabled: boolean, callback: (time: number) => void) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
 
   useEffect(() => {
-    if (!enabled) {
-      setTime(0);
-      return undefined;
-    }
+    if (!enabled) return undefined;
 
-    const update = (nextTime: number) => setTime(nextTime);
+    const update = (time: number) => callbackRef.current(time);
     update(performance.now() / 1000);
     motionClockSubscribers.add(update);
     startMotionClock();
@@ -1015,24 +1234,31 @@ function useMotionTime(enabled: boolean): number {
       stopMotionClockIfIdle();
     };
   }, [enabled]);
-
-  return enabled ? time : 0;
 }
 
 function startMotionClock() {
-  if (motionClockInterval !== null) return;
+  if (motionClockFrame !== null) return;
 
-  motionClockInterval = window.setInterval(() => {
-    const nextTime = performance.now() / 1000;
+  const tick = (now: number) => {
+    motionClockFrame = window.requestAnimationFrame(tick);
+    if (now - motionClockLastTime < MOTION_FRAME_MS) return;
+
+    motionClockLastTime = now;
+    if (document.hidden) return;
+
+    const nextTime = now / 1000;
     motionClockSubscribers.forEach((subscriber) => subscriber(nextTime));
-  }, MOTION_INTERVAL_MS);
+  };
+
+  motionClockFrame = window.requestAnimationFrame(tick);
 }
 
 function stopMotionClockIfIdle() {
-  if (motionClockSubscribers.size > 0 || motionClockInterval === null) return;
+  if (motionClockSubscribers.size > 0 || motionClockFrame === null) return;
 
-  window.clearInterval(motionClockInterval);
-  motionClockInterval = null;
+  window.cancelAnimationFrame(motionClockFrame);
+  motionClockFrame = null;
+  motionClockLastTime = 0;
 }
 
 function layerHasAnimatedSurface(layer: SquircleLayerConfig): boolean {
@@ -1129,6 +1355,17 @@ function hexToRgb(hex: string): [number, number, number] {
 
 function roundNumber(value: number): number {
   return Number(value.toFixed(1));
+}
+
+function detectMetalBackend(): MetalBackend {
+  if (typeof navigator === "undefined") return "blur";
+
+  const ua = navigator.userAgent;
+  const platform = navigator.platform;
+  const isIOS = /\b(iPad|iPhone|iPod)\b/.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isSafari = /Safari/i.test(ua) && !/(Chrome|Chromium|CriOS|FxiOS|Edg|OPR|Android)/i.test(ua);
+
+  return isIOS || isSafari ? "soft" : "blur";
 }
 
 function createGrainOverlays({

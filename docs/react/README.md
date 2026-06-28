@@ -214,7 +214,7 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
 
-`effect: "off"` uses the normal static top gradient. `metal` clips animated blurred color fields to the top face. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in the flat squircle plane and projected with the same isometric matrix as text. Effect colors are derived from the selected alpha palette. On `material: "transparent"`, the animated color field keeps `transparentFace` opacity. `grain: true` can be combined with any filled effect and renders as a clipped multiply-blended sibling overlay.
+`effect: "off"` uses the normal static top gradient. `metal` clips animated color fields to the top face. Chrome/Firefox keep the original SVG-blur metal backend; Safari/iOS use a no-filter soft-blob backend for performance. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in the flat squircle plane and projected with the same isometric matrix as text. Effect colors are derived from the selected alpha palette. On `material: "transparent"`, the animated color field keeps `transparentFace` opacity. `grain: true` can be combined with any filled effect and renders as a clipped multiply-blended sibling overlay.
 
 ## Stroke Parameters
 
@@ -285,5 +285,5 @@ Then open `/index.html`, `/demo.html`, and `/events.html` from the Vite dev serv
 - wireframe text outline uses the text-local gradient, not a single-stroke replacement.
 - solid and transparent palettes can switch between `off`, `metal`, and `mesh` without moving geometry or annotations.
 - `grain: true` stays clipped to the selected top face and does not grain the scene background.
-- `metal` reads as a smooth projected surface field, not as visible screen-space circles.
+- `metal` reads as a smooth projected surface field, not as visible screen-space circles. Chrome/Firefox should use `sq-top-effect-metal-blur`; Safari/iOS should use `sq-top-effect-metal-soft`.
 - `mesh` reads as a smooth four-corner surface blend, not as blobs, waves, or a hotspot.

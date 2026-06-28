@@ -36,6 +36,7 @@ Expected results:
 - Solid and transparent `metal` and `mesh` effects are clipped to the top face and animate without moving layer geometry.
 - Solid and transparent `grain: true` variants show subtle multiply-blended grain only inside the top face, not across the scene background.
 - Solid and transparent `metal` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
+- Chrome/Firefox `metal` uses `sq-top-effect-metal-blur`; Safari/iOS `metal` uses `sq-top-effect-metal-soft` and has no animated SVG blur filters.
 - Solid and transparent `mesh` effects look like a smooth four-corner bilinear gradient; no hotspots, blobs, waves, or noise are visible.
 - Geometry stays fixed when selection or hover changes.
 - Camera level affects the whole scene and serializes as `geometry.angleDegrees`.
