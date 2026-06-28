@@ -90,6 +90,8 @@ Effect invariants:
 
 The grain is not drawn inside the prism geometry. `SquircleScene` creates a sibling `<svg class="sq-grain-overlay">` above the main scene, computes one overlay rectangle per grained top face, and clips each rectangle to the generated `topPoints` polygon converted into `objectBoundingBox` coordinates. This keeps grain off the page background and off the side wall.
 
+Because the sibling overlay sits above the main SVG, each lower grain rectangle must also be masked by filled silhouettes of layers drawn above it. The occlusion mask is generated from later layers' `wallPoints` and `topPoints`, offset into the scene, normalized into the lower grain rectangle's object-bounding-box space, and polygon-clipped to `0..1`. This preserves the resolution-locked grain overlay while making grain respect the same layer draw order as the prism geometry.
+
 The current grain recipe is `mult-hard @ 0.5px`:
 
 ```ts
@@ -120,6 +122,7 @@ Grain invariants:
 - The overlay must be `pointer-events: none`.
 - When grain is available, the scene root wraps an internal frame; the frame, not external layout padding, owns the main SVG and grain overlay alignment.
 - Each overlay clip must come from generated top points plus the layer offset, not from hand-written coordinates.
+- Lower-layer grain must be masked against later filled layers so it never appears on top of a higher solid or transparent prism.
 - Grain hover changes should crossfade opacity with the same `--sq-transition-ms` as base/hover variants.
 - Do not use grain to add texture to wireframe material.
 

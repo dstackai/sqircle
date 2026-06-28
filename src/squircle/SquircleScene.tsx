@@ -134,6 +134,7 @@ type GrainOverlayModel = {
   opacity: number;
   rect: GrainOverlayRect;
   clipPoints: string;
+  occlusionPoints: string[];
 };
 
 type ViewBox = {
@@ -196,13 +197,27 @@ export function SquircleScene({
   const resolvedHoverFrameRef = useRef<number | null>(null);
   const resolvedHoverClearTimerRef = useRef<number | null>(null);
   const hasHoverResolver = layerModels.some(({ layer }) => typeof layer.hover === "function");
+  const controlledObjectHoverLayerIds = useMemo(() => new Set(
+    layerModels.flatMap(({ layer }, index) => {
+      const lowerGrainCanBeOccluded = layerModels
+        .slice(0, index)
+        .some(({ layer: lowerLayer }) => layerHasGrainSurface(lowerLayer));
+
+      return layerRequiresControlledObjectHover(layer, lowerGrainCanBeOccluded) ? [layer.id] : [];
+    })
+  ), [layerModels]);
+  const controlledHoverTargetIds = useMemo(() => {
+    if (hasHoverResolver) return new Set(layerModels.map(({ layer }) => layer.id));
+    return controlledObjectHoverLayerIds;
+  }, [controlledObjectHoverLayerIds, hasHoverResolver, layerModels]);
+  const controlledHoverTargetIdsRef = useRef<Set<string>>(controlledHoverTargetIds);
   const hasGrainCandidate = layerModels.some(({ layer }) => layerHasGrainSurface(layer));
   const hoverMap = useMemo(() => createResolvedHoverMap({
     layerModels,
     layers: visibleLayers,
     hoverState: resolvedHoverState,
-    controlledObjectHover: hasGrainCandidate
-  }), [hasGrainCandidate, layerModels, visibleLayers, resolvedHoverState]);
+    controlledObjectHoverLayerIds
+  }), [controlledObjectHoverLayerIds, layerModels, visibleLayers, resolvedHoverState]);
   const motionEnabled = layerModels.some(({ layer }) => {
     if (layerHasAnimatedSurface(layer)) return true;
     const hover = hoverMap.get(layer.id);
@@ -221,7 +236,11 @@ export function SquircleScene({
   }), [layerModels, hoverMap, sceneGeometry.viewBox]);
   const hasGrainOverlay = grainOverlays.length > 0;
   const shouldUseGrainWrapper = hasGrainCandidate || hasGrainOverlay;
-  const needsPointerTracking = hasHoverResolver || hasGrainCandidate;
+  const needsPointerTracking = controlledHoverTargetIds.size > 0;
+
+  useEffect(() => {
+    controlledHoverTargetIdsRef.current = controlledHoverTargetIds;
+  }, [controlledHoverTargetIds]);
 
   useEffect(() => () => {
     if (resolvedHoverFrameRef.current !== null) {
@@ -301,11 +320,23 @@ export function SquircleScene({
 
     const root = svgRef.current;
     if (!root) return undefined;
+    const isControlledHoverTarget = (layerId: string | null | undefined) => (
+      Boolean(layerId && controlledHoverTargetIdsRef.current.has(layerId))
+    );
 
     const handlePointerOver = (event: PointerEvent) => {
       const layerElement = closestLayerElement(event.target, root);
       const layerId = layerElement?.dataset.layerId;
-      if (!layerElement || !layerId || hoveredLayerIdRef.current === layerId) return;
+      if (!layerElement || !layerId) return;
+
+      if (!isControlledHoverTarget(layerId)) {
+        if (hoveredLayerIdRef.current) {
+          hoveredLayerIdRef.current = null;
+          hideResolvedHover();
+        }
+        return;
+      }
+      if (hoveredLayerIdRef.current === layerId) return;
 
       hoveredLayerIdRef.current = layerId;
       showResolvedHover(layerId);
@@ -318,8 +349,9 @@ export function SquircleScene({
       const nextLayerElement = closestLayerElement(event.relatedTarget, root);
       const nextLayerId = nextLayerElement?.dataset.layerId ?? null;
       if (nextLayerId === layerId) return;
+      if (isControlledHoverTarget(nextLayerId)) return;
 
-      if (!nextLayerId && hoveredLayerIdRef.current === layerId) {
+      if (hoveredLayerIdRef.current === layerId) {
         hoveredLayerIdRef.current = null;
         hideResolvedHover();
       }
@@ -569,10 +601,11 @@ function resolveLayerHover(
   layers: SquircleLayerConfig[],
   hoveredLayerId: string | null,
   visible: boolean,
-  controlledObjectHover: boolean
+  controlledObjectHoverLayerIds: Set<string>
 ): RenderHoverConfig | null {
   if (!layer.hover) return null;
   if (typeof layer.hover !== "function") {
+    const controlledObjectHover = controlledObjectHoverLayerIds.has(layer.id);
     return {
       enabled: controlledObjectHover && hoveredLayerId === layer.id && visible,
       mode: controlledObjectHover ? "controlled" : "css",
@@ -601,16 +634,16 @@ function createResolvedHoverMap({
   layerModels,
   layers,
   hoverState,
-  controlledObjectHover
+  controlledObjectHoverLayerIds
 }: {
   layerModels: LayerModel[];
   layers: SquircleLayerConfig[];
   hoverState: ResolvedHoverState;
-  controlledObjectHover: boolean;
+  controlledObjectHoverLayerIds: Set<string>;
 }): Map<string, RenderHoverConfig | null> {
   return new Map(layerModels.map(({ layer, index }) => [
     layer.id,
-    resolveLayerHover(layer, index, layers, hoverState.layerId, hoverState.visible, controlledObjectHover)
+    resolveLayerHover(layer, index, layers, hoverState.layerId, hoverState.visible, controlledObjectHoverLayerIds)
   ]));
 }
 
@@ -1275,6 +1308,18 @@ function variantHasAnimatedSurface(variant: ResolvedVariant): boolean {
   return variant.material !== "wireframe" && variant.effect !== "off";
 }
 
+function layerRequiresControlledObjectHover(layer: SquircleLayerConfig, lowerGrainCanBeOccluded = false): boolean {
+  if (!layer.hover || typeof layer.hover === "function") return false;
+
+  const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+  const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
+  if (variantSignature(base) === variantSignature(hover)) return false;
+
+  if (variantHasGrainSurface(base) || variantHasGrainSurface(hover)) return true;
+
+  return lowerGrainCanBeOccluded && variantOccludesLowerGrain(base) !== variantOccludesLowerGrain(hover);
+}
+
 function layerHasGrainSurface(layer: SquircleLayerConfig): boolean {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   if (variantHasGrainSurface(base)) return true;
@@ -1380,19 +1425,21 @@ function createGrainOverlays({
   const viewBox = parseViewBox(sceneViewBox);
   const overlays: GrainOverlayModel[] = [];
 
-  layerModels.forEach(({ layer, prefix, geometry }) => {
+  layerModels.forEach(({ layer, prefix, geometry }, layerIndex) => {
     const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
     const hover = hoverMap.get(layer.id) ?? null;
     const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
     const hasHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
     const hoverEnabled = Boolean(hasHover && hover?.enabled);
     const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
+    const occlusionPolygons = createHigherLayerOcclusionPolygons(layerModels, layerIndex, hoverMap);
 
     if (variantHasGrainSurface(base)) {
       overlays.push(createGrainOverlay({
         key: `${prefix}-base`,
         geometry,
         offset,
+        occlusionPolygons,
         viewBox,
         opacity: grainOverlayOpacity(base) * (hoverEnabled ? 0 : 1)
       }));
@@ -1403,6 +1450,7 @@ function createGrainOverlays({
         key: `${prefix}-hover`,
         geometry,
         offset,
+        occlusionPolygons,
         viewBox,
         opacity: grainOverlayOpacity(hoverVariant) * (hoverEnabled ? 1 : 0)
       }));
@@ -1416,12 +1464,14 @@ function createGrainOverlay({
   key,
   geometry,
   offset,
+  occlusionPolygons,
   viewBox,
   opacity
 }: {
   key: string;
   geometry: ReturnType<typeof createSquircleGeometry>;
   offset: SquirclePoint;
+  occlusionPolygons: SquirclePoint[][];
   viewBox: ViewBox;
   opacity: number;
 }): GrainOverlayModel {
@@ -1436,8 +1486,42 @@ function createGrainOverlay({
     visible: bounds.maxX > bounds.minX && bounds.maxY > bounds.minY,
     opacity,
     rect: createGrainOverlayRect(bounds, viewBox),
-    clipPoints: createGrainClipPoints(points, bounds)
+    clipPoints: createGrainClipPoints(points, bounds),
+    occlusionPoints: createGrainOcclusionClipPoints(occlusionPolygons, bounds)
   };
+}
+
+function createHigherLayerOcclusionPolygons(
+  layerModels: LayerModel[],
+  layerIndex: number,
+  hoverMap: Map<string, RenderHoverConfig | null>
+): SquirclePoint[][] {
+  return layerModels.slice(layerIndex + 1).flatMap(({ layer, geometry }) => {
+    if (!layerOccludesLowerGrain(layer, hoverMap.get(layer.id) ?? null)) return [];
+
+    const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
+    const offsetPoints = (points: SquirclePoint[]) => points.map((point) => ({
+      x: point.x + offset.x,
+      y: point.y + offset.y
+    }));
+
+    return [
+      offsetPoints(geometry.wallPoints),
+      offsetPoints(geometry.topPoints)
+    ];
+  });
+}
+
+function layerOccludesLowerGrain(layer: SquircleLayerConfig, hover: RenderHoverConfig | null): boolean {
+  const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+  if (!hover?.enabled) return variantOccludesLowerGrain(base);
+
+  const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+  return variantOccludesLowerGrain(hoverVariant);
+}
+
+function variantOccludesLowerGrain(variant: ResolvedVariant): boolean {
+  return variant.material !== "wireframe";
 }
 
 function createGrainOverlayBounds(points: SquirclePoint[]): GrainOverlayBounds {
@@ -1469,6 +1553,82 @@ function createGrainClipPoints(points: SquirclePoint[], bounds: GrainOverlayBoun
     roundUnit((point.x - bounds.minX) / width),
     roundUnit((point.y - bounds.minY) / height)
   ].join(",")).join(" ");
+}
+
+function createGrainOcclusionClipPoints(polygons: SquirclePoint[][], bounds: GrainOverlayBounds): string[] {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+
+  return polygons.flatMap((polygon) => {
+    const unitPolygon = polygon.map((point) => ({
+      x: (point.x - bounds.minX) / width,
+      y: (point.y - bounds.minY) / height
+    }));
+    const clipped = clipPolygonToUnitBox(unitPolygon);
+    if (clipped.length < 3) return [];
+
+    return [clipped.map((point) => [
+      roundUnit(point.x),
+      roundUnit(point.y)
+    ].join(",")).join(" ")];
+  });
+}
+
+function clipPolygonToUnitBox(points: SquirclePoint[]): SquirclePoint[] {
+  return [
+    (input: SquirclePoint[]) => clipPolygon(input, (point) => point.x >= 0, (a, b) => intersectAtX(a, b, 0)),
+    (input: SquirclePoint[]) => clipPolygon(input, (point) => point.x <= 1, (a, b) => intersectAtX(a, b, 1)),
+    (input: SquirclePoint[]) => clipPolygon(input, (point) => point.y >= 0, (a, b) => intersectAtY(a, b, 0)),
+    (input: SquirclePoint[]) => clipPolygon(input, (point) => point.y <= 1, (a, b) => intersectAtY(a, b, 1))
+  ].reduce((polygon, clip) => (polygon.length >= 3 ? clip(polygon) : []), points);
+}
+
+function clipPolygon(
+  points: SquirclePoint[],
+  isInside: (point: SquirclePoint) => boolean,
+  intersect: (start: SquirclePoint, end: SquirclePoint) => SquirclePoint
+): SquirclePoint[] {
+  const clipped: SquirclePoint[] = [];
+  if (points.length === 0) return clipped;
+
+  let previous = points[points.length - 1] as SquirclePoint;
+  let previousInside = isInside(previous);
+
+  points.forEach((current) => {
+    const currentInside = isInside(current);
+
+    if (currentInside) {
+      if (!previousInside) clipped.push(intersect(previous, current));
+      clipped.push(current);
+    } else if (previousInside) {
+      clipped.push(intersect(previous, current));
+    }
+
+    previous = current;
+    previousInside = currentInside;
+  });
+
+  return clipped;
+}
+
+function intersectAtX(start: SquirclePoint, end: SquirclePoint, x: number): SquirclePoint {
+  const dx = end.x - start.x;
+  if (Math.abs(dx) < 0.00001) return { x, y: start.y };
+  const amount = (x - start.x) / dx;
+  return {
+    x,
+    y: start.y + (end.y - start.y) * amount
+  };
+}
+
+function intersectAtY(start: SquirclePoint, end: SquirclePoint, y: number): SquirclePoint {
+  const dy = end.y - start.y;
+  if (Math.abs(dy) < 0.00001) return { x: start.x, y };
+  const amount = (y - start.y) / dy;
+  return {
+    x: start.x + (end.x - start.x) * amount,
+    y
+  };
 }
 
 function grainOverlayOpacity(variant: ResolvedVariant): number {
@@ -1526,6 +1686,23 @@ function GrainOverlay({ prefix, overlays }: { prefix: string; overlays: GrainOve
             <polygon points={overlay.clipPoints} />
           </clipPath>
         ))}
+        {visibleOverlays.filter((overlay) => overlay.occlusionPoints.length > 0).map((overlay) => (
+          <mask
+            key={`${overlay.key}-mask`}
+            id={`${prefix}-grain-mask-${overlay.key}`}
+            maskUnits="objectBoundingBox"
+            maskContentUnits="objectBoundingBox"
+            x="0"
+            y="0"
+            width="1"
+            height="1"
+          >
+            <rect x="0" y="0" width="1" height="1" fill="#ffffff" />
+            {overlay.occlusionPoints.map((points, index) => (
+              <polygon key={`${overlay.key}-mask-${index}`} points={points} fill="#000000" />
+            ))}
+          </mask>
+        ))}
       </defs>
       {visibleOverlays.map((overlay) => (
         <svg
@@ -1544,6 +1721,7 @@ function GrainOverlay({ prefix, overlays }: { prefix: string; overlays: GrainOve
             height="100%"
             clipPath={`url(#${prefix}-grain-clip-${overlay.key})`}
             filter={`url(#${filterId})`}
+            mask={overlay.occlusionPoints.length > 0 ? `url(#${prefix}-grain-mask-${overlay.key})` : undefined}
             style={{ opacity: overlay.opacity }}
           />
         </svg>

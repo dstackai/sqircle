@@ -1,6 +1,6 @@
 {
   "name": "@dstackai/sqircle",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "React components for precise isometric squircle-prism SVG compositions.",
   "type": "module",
   "license": "MIT",
