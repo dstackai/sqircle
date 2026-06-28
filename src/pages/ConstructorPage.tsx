@@ -10,6 +10,7 @@ createRoot(document.getElementById("root")!).render(
     initialLayers={createEditorSeed()}
     codeComponentName="CustomSquircle"
     codeImportPath="@dstackai/sqircle"
+    storageKey="@dstackai/sqircle:constructor"
     showCode
   />
 );

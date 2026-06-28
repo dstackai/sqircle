@@ -100,6 +100,8 @@ The complementary back-bottom edge is emitted as `ghost-hidden` and is only show
 - `labelTransform`: `matrix(cosA, sinA, -cosA, sinA, cx, cy - h)` for live SVG text.
 - `topBounds` and `sideBounds`: gradient coordinate boxes.
 
+`SquircleScene.geometry` supplies scene-level defaults and shared camera/projection/viewBox settings. `angleDegrees` is the scene camera elevation and must stay shared by all layers. A layer may override `exponent`, `prismHeight`, and `inlayScale` through `layer.geometry`; those overrides regenerate only that layer's prism, inlay, clip path, and effect filters. Layer offsets remain explicit and are not recalculated by selection, hover, or geometry changes.
+
 ## Regeneration Checklist
 
 When changing geometry, update the generator and keep these in sync:

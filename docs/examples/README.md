@@ -21,7 +21,7 @@ The examples must consume `SquircleScene`, `SquircleEditor`, palettes, and helpe
 
 - `index.html` renders a main three-layer scene and a collapsed/openable drawer of single-squircle states. Palette buttons recolor the examples through React state.
 - `demo.html` renders 96 generated composition presets, including alpha palettes and solid `off`/`fluid`/`frosted` surfaces. Clicking a card changes the main hero composition. Each layer hover is a state/color swap only.
-- `constructor.html` renders `SquircleEditor` with three default plain wireframe layers. The inspector exposes palette and effect controls. The Code panel exports React code using `@dstackai/sqircle` as the import path.
+- `constructor.html` renders `SquircleEditor` with three default plain wireframe layers. The left panel exposes scene camera; the inspector exposes per-layer geometry, palette, and effect controls. The Code panel exports React code using `@dstackai/sqircle` as the import path. It persists local editor state under `@dstackai/sqircle:constructor`.
 - `react.html` intentionally mirrors `constructor.html` for older links.
 
 ## Rules

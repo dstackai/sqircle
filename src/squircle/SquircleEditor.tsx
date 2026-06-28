@@ -12,6 +12,7 @@ import type {
   SquircleAnnotationColor,
   SquircleGeometryConfig,
   SquircleLayerConfig,
+  SquircleLayerGeometryConfig,
   SquircleMaterial,
   SquircleEffect,
   SquircleTheme,
@@ -24,12 +25,15 @@ const DEFAULT_TEXT = "GPU";
 const DEFAULT_EDITOR_GEOMETRY: SquircleGeometryConfig = {
   exponent: DEFAULT_GEOMETRY.exponent,
   prismHeight: DEFAULT_GEOMETRY.prismHeight,
-  inlayScale: DEFAULT_GEOMETRY.inlayScale
+  inlayScale: DEFAULT_GEOMETRY.inlayScale,
+  angleDegrees: DEFAULT_GEOMETRY.angleDegrees
 };
 const MIN_RADIUS = 0;
 const MAX_RADIUS = 100;
 const MIN_EXPONENT = 4;
 const MAX_EXPONENT = 24;
+const MIN_CAMERA_ANGLE = 8;
+const MAX_CAMERA_ANGLE = 34;
 const MIN_PRISM_HEIGHT = 4;
 const MAX_PRISM_HEIGHT = 36;
 const MIN_INLAY_SCALE = 0.35;
@@ -73,6 +77,16 @@ interface LegacyTextVariantConfig {
   gpuColor?: SquircleAnnotationColor;
 }
 
+interface PersistedEditorState {
+  version: 1;
+  layers?: SquircleLayerConfig[];
+  geometry?: SquircleGeometryConfig;
+  theme?: SquircleTheme;
+  selectedId?: string | null;
+  editingState?: "base" | "hover";
+  codeOpen?: boolean;
+}
+
 export interface SquircleEditorProps {
   value?: SquircleLayerConfig[];
   initialLayers?: SquircleLayerConfig[];
@@ -95,6 +109,7 @@ export interface SquircleEditorProps {
   defaultTheme?: SquircleTheme;
   onThemeChange?: (theme: SquircleTheme) => void;
   showThemeSwitch?: boolean;
+  storageKey?: string | false;
 }
 
 export function createDefaultSquircleEditorLayers(paletteId = "15"): SquircleLayerConfig[] {
@@ -135,24 +150,27 @@ export function SquircleEditor({
   theme,
   defaultTheme = "light",
   onThemeChange,
-  showThemeSwitch = true
+  showThemeSwitch = true,
+  storageKey
 }: SquircleEditorProps) {
+  const [persistedState] = useState<PersistedEditorState | null>(() => readPersistedEditorState(storageKey));
   const [internalLayers, setInternalLayers] = useState<SquircleLayerConfig[]>(
-    () => initialLayers ?? createDefaultSquircleEditorLayers()
+    () => persistedState?.layers ?? initialLayers ?? createDefaultSquircleEditorLayers()
   );
   const [internalGeometry, setInternalGeometry] = useState<SquircleGeometryConfig>(
-    () => ({ ...DEFAULT_EDITOR_GEOMETRY, ...initialGeometry })
+    () => ({ ...DEFAULT_EDITOR_GEOMETRY, ...initialGeometry, ...persistedState?.geometry })
   );
-  const [internalTheme, setInternalTheme] = useState<SquircleTheme>(defaultTheme);
+  const [internalTheme, setInternalTheme] = useState<SquircleTheme>(persistedState?.theme ?? defaultTheme);
   const layers = value ?? internalLayers;
   const activeGeometry = geometry ?? internalGeometry;
   const activeTheme = theme ?? internalTheme;
-  const [selectedId, setSelectedId] = useState<string | null>(() => layers.at(-1)?.id ?? null);
-  const [editingState, setEditingState] = useState<"base" | "hover">("base");
-  const [codeOpen, setCodeOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(() => persistedState?.selectedId ?? layers.at(-1)?.id ?? null);
+  const [editingState, setEditingState] = useState<"base" | "hover">(persistedState?.editingState ?? "base");
+  const [codeOpen, setCodeOpen] = useState(persistedState?.codeOpen ?? false);
   const [copiedCode, setCopiedCode] = useState(false);
   const selectedLayer = layers.find((layer) => layer.id === selectedId) ?? null;
   const selectedIndex = selectedLayer ? layers.findIndex((layer) => layer.id === selectedLayer.id) + 1 : null;
+  const selectedGeometry = selectedLayer ? layerGeometryForEditor(selectedLayer, activeGeometry) : null;
   const visibleLayerCount = layers.filter((layer) => layer.visible !== false).length;
   const shouldShowCode = showCode ?? showConfig;
   const maxOffsetY = Math.max(0, ...layers.map((layer) => layer.offset?.y ?? 0));
@@ -188,13 +206,25 @@ export function SquircleEditor({
     setCopiedCode(false);
   }, [reactCode]);
 
+  useEffect(() => {
+    writePersistedEditorState(storageKey, {
+      version: 1,
+      layers,
+      geometry: activeGeometry,
+      theme: activeTheme,
+      selectedId,
+      editingState,
+      codeOpen
+    });
+  }, [activeGeometry, activeTheme, codeOpen, editingState, layers, selectedId, storageKey]);
+
   function commitLayers(nextLayers: SquircleLayerConfig[], options: { reflow?: boolean } = {}) {
     const finalLayers = options.reflow ? reflowLayerOffsets(nextLayers, layerGap) : nextLayers;
     if (!value) setInternalLayers(finalLayers);
     onChange?.(finalLayers);
   }
 
-  function commitGeometry(patch: SquircleGeometryConfig) {
+  function commitSceneGeometry(patch: SquircleGeometryConfig) {
     const nextGeometry = { ...activeGeometry, ...patch };
     if (!geometry) setInternalGeometry(nextGeometry);
     onGeometryChange?.(nextGeometry);
@@ -217,6 +247,14 @@ export function SquircleEditor({
     updateLayer(selectedLayer.id, (layer) => ({
       ...layer,
       hover: { ...(layer.hover ?? {}), ...patch }
+    }));
+  }
+
+  function updateLayerGeometry(patch: SquircleLayerGeometryConfig) {
+    if (!selectedLayer) return;
+    updateLayer(selectedLayer.id, (layer) => ({
+      ...layer,
+      geometry: { ...layer.geometry, ...patch }
     }));
   }
 
@@ -362,33 +400,15 @@ export function SquircleEditor({
               );
             })}
           </div>
-          <EditorSection title="Shape">
+          <EditorSection title="Scene Camera" collapsible defaultOpen={false}>
             <RangeField
-              label="Radius"
-              value={radiusForExponent(activeGeometry.exponent ?? DEFAULT_GEOMETRY.exponent)}
-              min={MIN_RADIUS}
-              max={MAX_RADIUS}
+              label="Camera level"
+              value={activeGeometry.angleDegrees ?? DEFAULT_GEOMETRY.angleDegrees}
+              min={MIN_CAMERA_ANGLE}
+              max={MAX_CAMERA_ANGLE}
               step={1}
-              formatValue={(value) => `${Math.round(value)}%`}
-              onChange={(radius) => commitGeometry({ exponent: exponentForRadius(radius) })}
-            />
-            <RangeField
-              label="Height"
-              value={activeGeometry.prismHeight ?? DEFAULT_GEOMETRY.prismHeight}
-              min={MIN_PRISM_HEIGHT}
-              max={MAX_PRISM_HEIGHT}
-              step={1}
-              formatValue={(value) => `${Math.round(value)}px`}
-              onChange={(prismHeight) => commitGeometry({ prismHeight })}
-            />
-            <RangeField
-              label="Dash size"
-              value={(activeGeometry.inlayScale ?? DEFAULT_GEOMETRY.inlayScale) * 100}
-              min={MIN_INLAY_SCALE * 100}
-              max={MAX_INLAY_SCALE * 100}
-              step={1}
-              formatValue={(value) => `${Math.round(value)}%`}
-              onChange={(inlayScale) => commitGeometry({ inlayScale: roundTo(inlayScale / 100, 2) })}
+              formatValue={(value) => `${Math.round(value)}deg`}
+              onChange={(angleDegrees) => commitSceneGeometry({ angleDegrees })}
             />
           </EditorSection>
         </aside>
@@ -485,6 +505,38 @@ export function SquircleEditor({
                   {selectedLayer.hover ? <span className="state-dot" aria-hidden="true" /> : null}
                 </button>
               </div>
+
+              {selectedGeometry ? (
+                <EditorSection title="Geometry" collapsible defaultOpen={false}>
+                  <RangeField
+                    label="Radius"
+                    value={radiusForExponent(selectedGeometry.exponent)}
+                    min={MIN_RADIUS}
+                    max={MAX_RADIUS}
+                    step={1}
+                    formatValue={(value) => `${Math.round(value)}%`}
+                    onChange={(radius) => updateLayerGeometry({ exponent: exponentForRadius(radius) })}
+                  />
+                  <RangeField
+                    label="Height"
+                    value={selectedGeometry.prismHeight}
+                    min={MIN_PRISM_HEIGHT}
+                    max={MAX_PRISM_HEIGHT}
+                    step={1}
+                    formatValue={(value) => `${Math.round(value)}px`}
+                    onChange={(prismHeight) => updateLayerGeometry({ prismHeight })}
+                  />
+                  <RangeField
+                    label="Dash size"
+                    value={selectedGeometry.inlayScale * 100}
+                    min={MIN_INLAY_SCALE * 100}
+                    max={MAX_INLAY_SCALE * 100}
+                    step={1}
+                    formatValue={(value) => `${Math.round(value)}%`}
+                    onChange={(inlayScale) => updateLayerGeometry({ inlayScale: roundTo(inlayScale / 100, 2) })}
+                  />
+                </EditorSection>
+              ) : null}
 
               {editingState === "base" ? (
                 <VariantEditor
@@ -984,12 +1036,30 @@ function exponentForRadius(radius: number): number {
   return roundTo(MAX_EXPONENT - normalized * (MAX_EXPONENT - MIN_EXPONENT), 1);
 }
 
-function editorGeometryForCode(geometry: SquircleGeometryConfig): SquircleGeometryConfig {
+function layerGeometryForEditor(
+  layer: SquircleLayerConfig,
+  sceneGeometry: SquircleGeometryConfig
+): Required<SquircleLayerGeometryConfig> {
   return {
-    exponent: geometry.exponent ?? DEFAULT_GEOMETRY.exponent,
-    prismHeight: geometry.prismHeight ?? DEFAULT_GEOMETRY.prismHeight,
-    inlayScale: geometry.inlayScale ?? DEFAULT_GEOMETRY.inlayScale
+    exponent: layer.geometry?.exponent ?? sceneGeometry.exponent ?? DEFAULT_GEOMETRY.exponent,
+    prismHeight: layer.geometry?.prismHeight ?? sceneGeometry.prismHeight ?? DEFAULT_GEOMETRY.prismHeight,
+    inlayScale: layer.geometry?.inlayScale ?? sceneGeometry.inlayScale ?? DEFAULT_GEOMETRY.inlayScale
   };
+}
+
+function editorGeometryForCode(geometry: SquircleGeometryConfig): SquircleGeometryConfig {
+  return pruneUndefined({
+    width: geometry.width,
+    viewBoxHeight: geometry.viewBoxHeight,
+    samples: geometry.samples,
+    halfSize: geometry.halfSize,
+    angleDegrees: geometry.angleDegrees ?? DEFAULT_GEOMETRY.angleDegrees,
+    center: geometry.center
+  });
+}
+
+function pruneUndefined<T extends object>(input: T): T {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as T;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -999,6 +1069,46 @@ function clamp(value: number, min: number, max: number): number {
 function roundTo(value: number, precision: number): number {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
+}
+
+function readPersistedEditorState(storageKey: string | false | undefined): PersistedEditorState | null {
+  if (!storageKey || typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPersistedEditorState(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedEditorState(storageKey: string | false | undefined, state: PersistedEditorState) {
+  if (!storageKey || typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Persistence is a convenience only; storage quotas or private-mode errors should not break editing.
+  }
+}
+
+function isPersistedEditorState(value: unknown): value is PersistedEditorState {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<PersistedEditorState>;
+  const validTheme = record.theme === undefined || record.theme === "light" || record.theme === "dark";
+  const validEditingState = record.editingState === undefined || record.editingState === "base" || record.editingState === "hover";
+  const validSelectedId = record.selectedId === undefined || record.selectedId === null || typeof record.selectedId === "string";
+
+  return record.version === 1
+    && (record.layers === undefined || Array.isArray(record.layers))
+    && (record.geometry === undefined || typeof record.geometry === "object")
+    && validTheme
+    && validEditingState
+    && validSelectedId
+    && (record.codeOpen === undefined || typeof record.codeOpen === "boolean");
 }
 
 function variantHasText(variant: SquircleVariantConfig): boolean {

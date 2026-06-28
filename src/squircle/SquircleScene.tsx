@@ -12,6 +12,7 @@ import type {
   SquircleAnnotationColor,
   SquircleGeometryConfig,
   SquircleLayerConfig,
+  SquircleLayerGeometryConfig,
   SquircleMaterial,
   SquircleOpacityConfig,
   SquircleSceneProps,
@@ -126,12 +127,31 @@ export function SquircleScene({
   const prefix = idPrefix ?? `sq-${reactId}`;
   const geometryKey = JSON.stringify(geometry ?? {});
   const baseGeometry = useMemo(() => createSquircleGeometry(geometry), [geometryKey]);
-  const visibleLayers = layers.filter((layer) => layer.visible !== false);
-  const maxLayerY = Math.max(0, ...visibleLayers.map((layer) => layer.offset?.y ?? 0));
-  const viewBoxHeight = geometry?.viewBoxHeight ?? (fitToLayers ? Math.max(baseGeometry.config.viewBoxHeight, maxLayerY + baseGeometry.sideBounds.maxY + 18) : baseGeometry.config.viewBoxHeight);
-  const sceneGeometry = geometry?.viewBoxHeight === viewBoxHeight
+  const visibleLayers = useMemo(() => layers.filter((layer) => layer.visible !== false), [layers]);
+  const layerGeometryKey = JSON.stringify(visibleLayers.map((layer) => ({
+    id: layer.id,
+    geometry: layer.geometry,
+    offset: layer.offset
+  })));
+  const layerExtent = useMemo(() => Math.max(
+    0,
+    ...visibleLayers.map((layer) => {
+      const layerGeometry = createLayerGeometry(geometry, undefined, layer.geometry);
+      return (layer.offset?.y ?? 0) + layerGeometry.sideBounds.maxY;
+    })
+  ), [geometryKey, layerGeometryKey, visibleLayers]);
+  const viewBoxHeight = geometry?.viewBoxHeight ?? (fitToLayers ? Math.max(baseGeometry.config.viewBoxHeight, layerExtent + 18) : baseGeometry.config.viewBoxHeight);
+  const sceneGeometry = useMemo(() => (geometry?.viewBoxHeight === viewBoxHeight
     ? baseGeometry
-    : createSquircleGeometry({ ...geometry, viewBoxHeight });
+    : createSquircleGeometry({ ...geometry, viewBoxHeight })), [baseGeometry, geometry, viewBoxHeight]);
+  const layerModels = useMemo(() => visibleLayers.map((layer, index) => {
+    const layerPrefix = `${prefix}-${index}-${safeIdPart(layer.id)}`;
+    const layerGeometry = layer.geometry
+      ? createLayerGeometry(geometry, viewBoxHeight, layer.geometry)
+      : sceneGeometry;
+
+    return { layer, prefix: layerPrefix, geometry: layerGeometry };
+  }), [geometry, prefix, sceneGeometry, viewBoxHeight, visibleLayers]);
   const svgStyle = { "--sq-transition-ms": `${transitionMs}ms` } as CSSProperties;
   const motionEnabled = visibleLayers.some(layerHasAnimatedSurface);
   const motionTime = useMotionTime(motionEnabled);
@@ -145,13 +165,15 @@ export function SquircleScene({
       aria-label={ariaLabel}
       style={svgStyle}
     >
-      <SquircleDefinitions prefix={prefix} geometry={sceneGeometry} />
-      {visibleLayers.map((layer) => (
+      {layerModels.map((model) => (
+        <SquircleDefinitions key={`${model.prefix}-defs`} prefix={model.prefix} geometry={model.geometry} />
+      ))}
+      {layerModels.map(({ layer, prefix: layerPrefix, geometry: layerGeometry }) => (
         <SquircleLayer
           key={layer.id}
           layer={layer}
-          geometry={sceneGeometry}
-          prefix={prefix}
+          geometry={layerGeometry}
+          prefix={layerPrefix}
           motionTime={motionTime}
           selected={selectedLayerId === layer.id}
           onSelect={onLayerSelect}
@@ -159,6 +181,22 @@ export function SquircleScene({
       ))}
     </svg>
   );
+}
+
+function createLayerGeometry(
+  sceneGeometry: SquircleGeometryConfig | undefined,
+  viewBoxHeight: number | undefined,
+  layerGeometry: SquircleLayerGeometryConfig | undefined
+) {
+  return createSquircleGeometry({
+    ...sceneGeometry,
+    ...(viewBoxHeight === undefined ? {} : { viewBoxHeight }),
+    ...layerGeometry
+  });
+}
+
+function safeIdPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "-") || "layer";
 }
 
 function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: ReturnType<typeof createSquircleGeometry> }) {

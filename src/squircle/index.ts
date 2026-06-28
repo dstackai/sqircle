@@ -21,6 +21,7 @@ export type {
   SquircleEffect,
   SquircleGeometryConfig,
   SquircleLayerConfig,
+  SquircleLayerGeometryConfig,
   SquircleMaterial,
   SquircleOpacityConfig,
   SquircleSceneProps,

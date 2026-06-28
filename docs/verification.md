@@ -26,7 +26,7 @@ Open the Vite dev server and inspect:
 
 - `/index.html`: hero scene renders through React, palette buttons recolor it, and the single-state drawer can select a state.
 - `/demo.html`: gallery renders many React-generated presets, clicking a preset updates the main scene, and hovering a squircle swaps only material/color state.
-- `/constructor.html`: editor renders three default plain wireframe layers, supports layer add/delete/visibility, click selection, theme switching, palette controls, effect controls, stroke controls, and generated React code copy.
+- `/constructor.html`: editor renders three default plain wireframe layers, supports layer add/delete/visibility, click selection, theme switching, scene camera controls, per-layer geometry controls, palette controls, effect controls, stroke controls, and generated React code copy.
 - `/react.html`: mirrors the constructor page for compatibility.
 
 Expected results:
@@ -35,6 +35,9 @@ Expected results:
 - Solid `fluid` and `frosted` effects are clipped to the top face and animate without moving layer geometry.
 - Solid `fluid` and `frosted` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
 - Geometry stays fixed when selection or hover changes.
+- Camera level affects the whole scene and serializes as `geometry.angleDegrees`.
+- Radius, height, and dash-size edits affect only the selected layer and serialize into that layer's `geometry` object.
+- Reloading `/constructor.html` restores layers, scene camera, theme, selection, and Code drawer state from localStorage.
 - No hover state changes layer gaps, transforms, scale, shadows, filters, or halos.
 - Wireframe text uses one live SVG `<text>` element with gradient stroke, not duplicated label copies or primitive letter parts.
 - Solid text uses high-contrast filled text on the top plane.
@@ -54,6 +57,7 @@ Expected results:
 Confirm any visual change still follows the design docs:
 
 - Superellipse points are generated from `src/squircle/geometry.ts`, not hand-written.
+- Layer `geometry` may override only `exponent`, `prismHeight`, and `inlayScale`; shared camera/projection/viewBox settings remain scene-level.
 - Front-facing side wall uses hidden-surface removal from the sampled superellipse normals.
 - Gradients use `userSpaceOnUse` and palette constants from `src/squircle/palettes.ts`.
 - Effects use the generated top polygon as the clip path.

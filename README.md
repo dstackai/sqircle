@@ -91,7 +91,7 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | Prop | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `layers` | `SquircleLayerConfig[]` | required | Draw-order layer array. First item is lowest/backmost; last item is topmost/frontmost. |
-| `geometry` | `SquircleGeometryConfig` | `DEFAULT_GEOMETRY` | Scene geometry, projection, prism height, and dashed inlay scale. |
+| `geometry` | `SquircleGeometryConfig` | `DEFAULT_GEOMETRY` | Scene-level geometry defaults, camera/projection, fitting, and viewBox settings. |
 | `selectedLayerId` | `string \| null` | `null` | Marks a layer as selected for class/state styling. Does not move or restack layers. |
 | `theme` | `light`, `dark` | `light` | Adds theme classes/data attributes for host styling while keeping the SVG background transparent. |
 | `idPrefix` | `string` | generated React id | Prefix for SVG gradient ids. Use when deterministic ids are required. |
@@ -108,6 +108,7 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | `id` | `string` | required | Stable layer id. |
 | `visible` | `boolean` | `true` | Hidden layers are skipped without changing other offsets. |
 | `offset` | `{ x?: number; y?: number }` | `{ x: 0, y: 0 }` | SVG translation for this layer. |
+| `geometry` | `SquircleLayerGeometryConfig` | scene geometry | Per-layer radius, prism height, and dashed inlay scale. |
 | `base` | `SquircleVariantConfig` | required | Normal layer state. |
 | `hover` | `SquircleVariantConfig` | none | Hover state merged over `base`. If absent or identical, no hover copy is rendered. |
 | `stroke` | `Partial<SquircleStrokeConfig>` | default strokes | Layer-wide stroke overrides. |
@@ -136,7 +137,19 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 
 `auto` is the preferred value for palette-managed annotation paint. `contrast` remains a backwards-compatible alias and renders the same way. `gpu`, `gpuStyle`, and `gpuColor` are deprecated aliases accepted only for older snippets; new configs and generated code should use `text`, `textStyle`, and `textColor`.
 
+### `SquircleLayerGeometryConfig`
+
+Layer geometry overrides affect one squircle only. Use these fields when a composition needs mixed corner radius, prism height, or dashed-inlay proportion while keeping the shared scene projection.
+
+| Field | Type | Inherits From | Meaning |
+| --- | --- | --- | --- |
+| `exponent` | `number` | `geometry.exponent` | Superellipse exponent for this layer. Lower is rounder, higher is squarer. |
+| `prismHeight` | `number` | `geometry.prismHeight` | Extrusion height for this layer in SVG units. |
+| `inlayScale` | `number` | `geometry.inlayScale` | Dashed inlay size relative to this layer's outer squircle. |
+
 ### `SquircleGeometryConfig`
+
+Scene geometry supplies defaults for layers plus shared camera/projection/viewBox behavior. Prefer `layer.geometry` for per-layer radius, height, and dash size.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -146,7 +159,7 @@ Each layer has a required `base` variant and an optional `hover` variant. Hover 
 | `samples` | `number` | `160` | Number of sampled superellipse points. |
 | `halfSize` | `number` | computed from `width` | Raw superellipse half-size before projection. |
 | `prismHeight` | `number` | `10` | Extrusion height in SVG units. |
-| `angleDegrees` | `number` | `20` | Isometric projection elevation angle. |
+| `angleDegrees` | `number` | `20` | Scene camera elevation angle. Lower values are more side-on; higher values show more of the top face. |
 | `inlayScale` | `number` | `0.6` | Dashed inlay scale relative to the outer squircle. |
 | `center` | `{ x: number; y: number }` | computed | Projection center. Override only when manually composing a custom viewBox. |
 

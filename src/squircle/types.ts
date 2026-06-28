@@ -21,6 +21,8 @@ export interface SquircleGeometryConfig {
   center?: SquirclePoint;
 }
 
+export type SquircleLayerGeometryConfig = Pick<SquircleGeometryConfig, "exponent" | "prismHeight" | "inlayScale">;
+
 export interface SquircleStrokeConfig {
   face: number;
   faceOpacity: number;
@@ -59,6 +61,7 @@ export interface SquircleLayerConfig {
   id: string;
   visible?: boolean;
   offset?: Partial<SquirclePoint>;
+  geometry?: SquircleLayerGeometryConfig;
   base: SquircleVariantConfig;
   hover?: SquircleVariantConfig;
   stroke?: Partial<SquircleStrokeConfig>;
