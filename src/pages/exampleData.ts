@@ -1,11 +1,11 @@
-import type { SquircleEffect, SquircleLayerConfig, SquircleMaterial, SquircleTheme, SquircleVariantConfig } from "../squircle";
+import type { SquircleEffect, SquircleLayerConfig, SquircleLineStyle, SquircleMaterial, SquircleTheme, SquircleVariantConfig } from "../squircle";
 import { SQUIRCLE_PALETTE_IDS, reflowLayerOffsets } from "../squircle";
 
 export const PAGE_LAYER_GAP = 88;
 export const PAGE_PALETTES = SQUIRCLE_PALETTE_IDS;
 
 const materials: SquircleMaterial[] = ["wireframe", "solid", "transparent"];
-const effects = ["off", "fluid", "frosted"] as const satisfies readonly SquircleEffect[];
+const effects = ["off", "metal"] as const satisfies readonly SquircleEffect[];
 const labels = ["GPU", "CUDA", "AI", "{}"];
 
 export interface CompositionPreset {
@@ -19,8 +19,8 @@ export function createHeroLayers(paletteId = "15"): SquircleLayerConfig[] {
   return reflowLayerOffsets([
     {
       id: "bottom",
-      base: { material: "solid", paletteId, dash: true },
-      hover: { material: "wireframe", paletteId: "20", dash: true }
+      base: { material: "solid", paletteId, line: "dashed" },
+      hover: { material: "wireframe", paletteId: "20", line: "dashed" }
     },
     {
       id: "middle",
@@ -30,7 +30,7 @@ export function createHeroLayers(paletteId = "15"): SquircleLayerConfig[] {
     {
       id: "top",
       base: { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe" },
-      hover: { material: "solid", paletteId, text: "GPU", textStyle: "solid", dash: true }
+      hover: { material: "solid", paletteId, text: "GPU", textStyle: "solid", line: "dashed" }
     }
   ], PAGE_LAYER_GAP);
 }
@@ -40,17 +40,17 @@ export function createSingleStatePresets(paletteId: string): CompositionPreset[]
     { material: "solid", paletteId },
     { material: "solid", paletteId, text: "GPU", textStyle: "solid" },
     { material: "solid", paletteId, text: "GPU", textStyle: "wireframe" },
-    { material: "solid", paletteId, dash: true },
-    { material: "solid", paletteId, text: "GPU", textStyle: "solid", dash: true },
-    { material: "solid", paletteId, effect: "fluid", text: "GPU", textStyle: "solid", dash: true },
-    { material: "solid", paletteId, effect: "frosted", text: "{}", textStyle: "wireframe", dash: true },
+    { material: "solid", paletteId, line: "solid" },
+    { material: "solid", paletteId, text: "GPU", textStyle: "solid", line: "dotted" },
+    { material: "solid", paletteId, effect: "metal", text: "GPU", textStyle: "solid", line: "dashed" },
     { material: "transparent", paletteId },
     { material: "transparent", paletteId, text: "GPU", textStyle: "solid" },
-    { material: "transparent", paletteId, text: "GPU", textStyle: "wireframe", dash: true },
+    { material: "transparent", paletteId, text: "GPU", textStyle: "wireframe", line: "dotted" },
+    { material: "transparent", paletteId, effect: "metal", text: "AI", textStyle: "solid", line: "dashed" },
     { material: "wireframe", paletteId },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "solid" },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe" },
-    { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe", dash: true }
+    { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe", line: "dashed" }
   ];
 
   return baseStates.map((base, index) => ({
@@ -132,16 +132,16 @@ export function pageThemeClass(theme: SquircleTheme): string {
 function createVariant(index: number, paletteId: string, layerIndex: number): SquircleVariantConfig {
   const material = materials[(index + layerIndex) % materials.length] ?? "wireframe";
   const withText = (index + layerIndex) % 4 === 0 || layerIndex === 2;
-  const withDash = (index + layerIndex) % 3 === 0;
+  const line = lineFor(index, layerIndex);
   const textStyle = material === "wireframe" || index % 2 === 0 ? "wireframe" : "solid";
 
   return {
     material,
     paletteId,
-    effect: material === "solid" ? effects[index % effects.length] : undefined,
+    effect: materialSupportsEffect(material) ? effects[index % effects.length] : undefined,
     text: withText ? labels[(index + layerIndex) % labels.length] : false,
     textStyle,
-    dash: withDash
+    line
   };
 }
 
@@ -152,30 +152,42 @@ function hoverFor(base: SquircleVariantConfig, index: number, paletteId = base.p
     ...base,
     material,
     paletteId,
-    effect: material === "solid" ? effects[index % effects.length] : base.effect,
+    effect: materialSupportsEffect(material) ? effects[index % effects.length] : undefined,
     textStyle: base.textStyle === "wireframe" ? "solid" : "wireframe"
   };
 }
 
 function singleName(base: SquircleVariantConfig): string {
   const pieces: string[] = [base.material ?? "wireframe"];
+  if (base.effect && base.effect !== "off") pieces.push(base.effect);
   if (base.text) pieces.push("text");
-  if (base.dash) pieces.push("dash");
+  if (base.line) pieces.push(`${base.line} line`);
   if (base.textStyle === "wireframe") pieces.push("outlined");
   return titleCase(pieces.join(" + "));
 }
 
 function singleNote(base: SquircleVariantConfig): string {
+  const effect = base.effect && base.effect !== "off" ? ` / ${base.effect}` : "";
   const text = base.text ? `text ${base.textStyle ?? "solid"}` : "no text";
-  const dash = base.dash ? "dash" : "no dash";
-  return `${base.material ?? "wireframe"} / ${text} / ${dash}`;
+  const line = base.line ? `${base.line} line` : "no line";
+  return `${base.material ?? "wireframe"}${effect} / ${text} / ${line}`;
 }
 
 function summary(base: SquircleVariantConfig): string {
   const parts: string[] = [base.material ?? "wireframe"];
+  if (base.effect && base.effect !== "off") parts.push(base.effect);
   if (base.text) parts.push("text");
-  if (base.dash) parts.push("dash");
+  if (base.line) parts.push(`${base.line}-line`);
   return parts.join("+");
+}
+
+function lineFor(index: number, layerIndex: number): SquircleLineStyle | false {
+  const styles: (SquircleLineStyle | false)[] = [false, "solid", "dotted", "dashed"];
+  return styles[(index + layerIndex) % styles.length] ?? false;
+}
+
+function materialSupportsEffect(material: SquircleMaterial | undefined): boolean {
+  return material === "solid" || material === "transparent";
 }
 
 function titleCase(value: string): string {

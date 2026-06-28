@@ -96,7 +96,7 @@ The complementary back-bottom edge is emitted as `ghost-hidden` and is only show
 - `topPoints`: lit top-face polygon.
 - `wallPoints`: one continuous front side-wall polygon.
 - `hiddenPoints`: back/bottom edge used only in wireframe mode.
-- `inlayPoints`: top-plane dashed squircle polygon.
+- `inlayPoints`: top-plane line-inlay squircle polygon.
 - `labelTransform`: `matrix(cosA, sinA, -cosA, sinA, cx, cy - h)` for live SVG text.
 - `topBounds` and `sideBounds`: gradient coordinate boxes.
 

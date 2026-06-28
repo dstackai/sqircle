@@ -21,6 +21,7 @@ export function PageShell({ title, description, theme, onThemeChange, children }
         <nav className="sq-page-actions" aria-label="Examples">
           <a href="./index.html">Index</a>
           <a href="./demo.html">Demo</a>
+          <a href="./events.html">Hover</a>
           <a href="./constructor.html">Constructor</a>
           <ThemeSwitch theme={theme} onThemeChange={onThemeChange} />
         </nav>

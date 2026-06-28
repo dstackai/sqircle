@@ -1,7 +1,10 @@
+import type { MouseEvent as ReactMouseEvent } from "react";
+
 export type SquircleMaterial = "solid" | "transparent" | "wireframe";
-export type SquircleAnnotationColor = "contrast" | "auto" | "white" | "black";
+export type SquircleAnnotationColor = "auto" | "white" | "black";
 export type SquircleTextStyle = "solid" | "wireframe";
-export type SquircleEffect = "off" | "fluid" | "frosted";
+export type SquircleLineStyle = "solid" | "dotted" | "dashed";
+export type SquircleEffect = "off" | "metal";
 export type SquircleTheme = "light" | "dark";
 
 export interface SquirclePoint {
@@ -30,8 +33,8 @@ export interface SquircleStrokeConfig {
   wireOpacity: number;
   hidden: number;
   hiddenOpacity: number;
-  dash: number;
-  wireDash: number;
+  line: number;
+  wireLine: number;
   labelWire: number;
 }
 
@@ -45,17 +48,29 @@ export interface SquircleVariantConfig {
   material?: SquircleMaterial;
   paletteId?: string;
   effect?: SquircleEffect;
-  text?: string | boolean;
-  dash?: boolean;
+  text?: string | false;
+  line?: SquircleLineStyle | false;
   textStyle?: SquircleTextStyle;
   textColor?: SquircleAnnotationColor;
   textSize?: number;
   textFontFamily?: string;
   textFontWeight?: string | number;
-  dashColor?: SquircleAnnotationColor;
+  lineColor?: SquircleAnnotationColor;
   stroke?: Partial<SquircleStrokeConfig>;
   opacity?: Partial<SquircleOpacityConfig>;
 }
+
+export interface SquircleLayerHoverContext {
+  layer: SquircleLayerConfig;
+  index: number;
+  layers: SquircleLayerConfig[];
+  hoveredLayerId: string;
+  hoveredLayer: SquircleLayerConfig;
+  hoveredIndex: number;
+}
+
+export type SquircleLayerHoverResolver = (context: SquircleLayerHoverContext) => SquircleVariantConfig | false | null | undefined;
+export type SquircleLayerHoverConfig = SquircleVariantConfig | SquircleLayerHoverResolver;
 
 export interface SquircleLayerConfig {
   id: string;
@@ -63,11 +78,21 @@ export interface SquircleLayerConfig {
   offset?: Partial<SquirclePoint>;
   geometry?: SquircleLayerGeometryConfig;
   base: SquircleVariantConfig;
-  hover?: SquircleVariantConfig;
+  hover?: SquircleLayerHoverConfig;
   stroke?: Partial<SquircleStrokeConfig>;
   opacity?: Partial<SquircleOpacityConfig>;
   className?: string;
 }
+
+export interface SquircleLayerClickEvent {
+  layerId: string;
+  layer: SquircleLayerConfig;
+  index: number;
+  layerElement: SVGGElement;
+  event: ReactMouseEvent<SVGSVGElement>;
+}
+
+export type SquircleLayerClickEventHandler = (event: SquircleLayerClickEvent) => void;
 
 export interface SquircleSceneProps {
   layers: SquircleLayerConfig[];
@@ -79,5 +104,5 @@ export interface SquircleSceneProps {
   ariaLabel?: string;
   fitToLayers?: boolean;
   transitionMs?: number;
-  onLayerSelect?: (layerId: string) => void;
+  onLayerClick?: SquircleLayerClickEventHandler;
 }

@@ -28,11 +28,13 @@
   pointer-events: none;
 }
 
-.sq-layer.sq-has-hover:hover > .sq-base {
+.sq-layer.sq-has-hover:hover > .sq-base,
+.sq-layer.sq-hover-enabled > .sq-base {
   opacity: 0;
 }
 
-.sq-layer.sq-has-hover:hover > .sq-hover {
+.sq-layer.sq-has-hover:hover > .sq-hover,
+.sq-layer.sq-hover-enabled > .sq-hover {
   opacity: 1;
 }
 
@@ -50,11 +52,11 @@
   stroke-linejoin: round;
 }
 
-.sq-inlay {
+.sq-line {
   fill: none;
   pointer-events: none;
   shape-rendering: geometricPrecision;
-  stroke-dasharray: 9 8;
+  stroke-linecap: round;
   stroke-linejoin: round;
 }
 

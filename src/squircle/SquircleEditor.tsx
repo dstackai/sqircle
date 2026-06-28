@@ -13,6 +13,7 @@ import type {
   SquircleGeometryConfig,
   SquircleLayerConfig,
   SquircleLayerGeometryConfig,
+  SquircleLineStyle,
   SquircleMaterial,
   SquircleEffect,
   SquircleTheme,
@@ -42,24 +43,30 @@ const MIN_TEXT_SIZE = 34;
 const MAX_TEXT_SIZE = 92;
 const DEFAULT_TEXT_SIZE = 62;
 const DEFAULT_TEXT_FONT_WEIGHT = 400;
-type EditorAnnotationColor = Extract<SquircleAnnotationColor, "auto" | "white" | "black">;
+type EditorAnnotationColor = SquircleAnnotationColor;
+type EditorLineOption = SquircleLineStyle | "off";
 
 const MATERIAL_OPTIONS = [
   { value: "wireframe", label: "Wire", title: "Gradient outline with transparent faces" },
   { value: "solid", label: "Solid", title: "Filled prism with top and side gradients" },
-  { value: "transparent", label: "Glass", title: "Translucent filled prism" }
+  { value: "transparent", label: "Transparent", title: "Translucent filled prism" }
 ] satisfies { value: SquircleMaterial; label: string; title: string }[];
 const EFFECT_OPTIONS = [
   { value: "off", label: "Off", title: "Use the static top-face gradient" },
-  { value: "fluid", label: "Fluid", title: "Animated clipped gradient blobs on the top face" },
-  { value: "frosted", label: "Frosted", title: "Muted animated blobs with a pale glass veil and rim" }
+  { value: "metal", label: "Metal", title: "Animated projected metallic gradient on the top face" }
 ] satisfies { value: SquircleEffect; label: string; title: string }[];
 const TEXT_STYLE_OPTIONS = [
   { value: "solid", label: "Filled", title: "Filled top-plane text" },
   { value: "wireframe", label: "Outline", title: "Outlined top-plane text" }
 ] satisfies { value: "solid" | "wireframe"; label: string; title: string }[];
+const LINE_OPTIONS = [
+  { value: "off", label: "Off", title: "Hide the top-plane inner line" },
+  { value: "solid", label: "Solid", title: "Continuous top-plane inner line" },
+  { value: "dotted", label: "Dotted", title: "Rounded dotted top-plane inner line" },
+  { value: "dashed", label: "Dashed", title: "Broken top-plane inner line" }
+] satisfies { value: EditorLineOption; label: string; title: string }[];
 const ANNOTATION_COLOR_OPTIONS = [
-  { value: "auto", label: "Auto", title: "Use the palette contrast color" },
+  { value: "auto", label: "Auto", title: "Use the palette annotation color" },
   { value: "white", label: "White", title: "Use fixed white annotation paint" },
   { value: "black", label: "Black", title: "Use fixed black annotation paint" }
 ] satisfies { value: EditorAnnotationColor; label: string; title: string }[];
@@ -71,14 +78,8 @@ const FONT_WEIGHT_OPTIONS = [
   { value: "700", label: "Bold", title: "Strongest top-plane label" }
 ] satisfies { value: string; label: string; title: string }[];
 
-interface LegacyTextVariantConfig {
-  gpu?: boolean;
-  gpuStyle?: "solid" | "wireframe";
-  gpuColor?: SquircleAnnotationColor;
-}
-
 interface PersistedEditorState {
-  version: 1;
+  version: 3;
   layers?: SquircleLayerConfig[];
   geometry?: SquircleGeometryConfig;
   theme?: SquircleTheme;
@@ -96,13 +97,9 @@ export interface SquircleEditorProps {
   onGeometryChange?: (geometry: SquircleGeometryConfig) => void;
   title?: string;
   description?: string;
-  /** @deprecated The editor now exports React code instead of schema-tagged JSON. */
-  schema?: string;
   className?: string;
   layerGap?: number;
   showCode?: boolean;
-  /** @deprecated Use showCode. */
-  showConfig?: boolean;
   codeComponentName?: string;
   codeImportPath?: string;
   theme?: SquircleTheme;
@@ -143,8 +140,7 @@ export function SquircleEditor({
   description = "React component constructor with 0-N layers and exported code.",
   className,
   layerGap = DEFAULT_LAYER_GAP,
-  showCode,
-  showConfig = true,
+  showCode = true,
   codeComponentName,
   codeImportPath = "./squircle",
   theme,
@@ -169,10 +165,11 @@ export function SquircleEditor({
   const [codeOpen, setCodeOpen] = useState(persistedState?.codeOpen ?? false);
   const [copiedCode, setCopiedCode] = useState(false);
   const selectedLayer = layers.find((layer) => layer.id === selectedId) ?? null;
+  const selectedHover = selectedLayer ? editableHoverVariant(selectedLayer.hover) : undefined;
   const selectedIndex = selectedLayer ? layers.findIndex((layer) => layer.id === selectedLayer.id) + 1 : null;
   const selectedGeometry = selectedLayer ? layerGeometryForEditor(selectedLayer, activeGeometry) : null;
   const visibleLayerCount = layers.filter((layer) => layer.visible !== false).length;
-  const shouldShowCode = showCode ?? showConfig;
+  const shouldShowCode = showCode;
   const maxOffsetY = Math.max(0, ...layers.map((layer) => layer.offset?.y ?? 0));
   const sceneConfig = useMemo(
     () => ({
@@ -198,7 +195,8 @@ export function SquircleEditor({
   );
 
   useEffect(() => {
-    if (selectedId && layers.some((layer) => layer.id === selectedId)) return;
+    if (!selectedId) return;
+    if (layers.some((layer) => layer.id === selectedId)) return;
     setSelectedId(layers.at(-1)?.id ?? null);
   }, [layers, selectedId]);
 
@@ -208,7 +206,7 @@ export function SquircleEditor({
 
   useEffect(() => {
     writePersistedEditorState(storageKey, {
-      version: 1,
+      version: 3,
       layers,
       geometry: activeGeometry,
       theme: activeTheme,
@@ -246,7 +244,7 @@ export function SquircleEditor({
     if (!selectedLayer) return;
     updateLayer(selectedLayer.id, (layer) => ({
       ...layer,
-      hover: { ...(layer.hover ?? {}), ...patch }
+      hover: { ...(editableHoverVariant(layer.hover) ?? {}), ...patch }
     }));
   }
 
@@ -280,6 +278,18 @@ export function SquircleEditor({
 
   function toggleVisibility(id: string) {
     updateLayer(id, (layer) => ({ ...layer, visible: layer.visible === false }));
+  }
+
+  function moveLayer(id: string, direction: -1 | 1) {
+    const currentIndex = layers.findIndex((layer) => layer.id === id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= layers.length) return;
+
+    const nextLayers = [...layers];
+    const [layer] = nextLayers.splice(currentIndex, 1);
+    if (!layer) return;
+    nextLayers.splice(nextIndex, 0, layer);
+    commitLayers(nextLayers, { reflow: true });
   }
 
   function commitTheme(nextTheme: SquircleTheme) {
@@ -352,10 +362,11 @@ export function SquircleEditor({
           </div>
           <div className="squircle-editor-layer-list">
             {[...layers].reverse().map((layer, reverseIndex) => {
+              const arrayIndex = layers.length - reverseIndex - 1;
               const index = layers.length - reverseIndex;
               const palette = getPalette(layer.base.paletteId);
               const material = layer.base.material ?? "wireframe";
-              const effect = variantEffect(layer.base);
+              const effect = materialSupportsEffect(material) ? variantEffect(layer.base) : "off";
               return (
                 <article className={layer.id === selectedId ? "squircle-editor-layer-row is-active" : "squircle-editor-layer-row"} key={layer.id}>
                   <button
@@ -379,23 +390,47 @@ export function SquircleEditor({
                       </span>
                       <span className="layer-feature-tags">
                         {variantHasText(layer.base) ? <span>Text</span> : null}
-                        {layer.base.dash ? <span>Dash</span> : null}
-                        {material === "solid" && effect !== "off" ? <span>{effect}</span> : null}
+                        {layer.base.line ? <span>Line</span> : null}
+                        {materialSupportsEffect(material) && effect !== "off" ? <span>{effect}</span> : null}
                         {layer.hover ? <span>Hover</span> : null}
-                        {!variantHasText(layer.base) && !layer.base.dash && !layer.hover && effect === "off" ? <span>Clean</span> : null}
+                        {!variantHasText(layer.base) && !layer.base.line && !layer.hover && effect === "off" ? <span>Clean</span> : null}
                       </span>
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="icon-button layer-visibility"
-                    aria-label={layer.visible === false ? "Show layer" : "Hide layer"}
-                    aria-pressed={layer.visible !== false}
-                    title={layer.visible === false ? "Show layer" : "Hide layer"}
-                    onClick={() => toggleVisibility(layer.id)}
-                  >
-                    {layer.visible === false ? <EyeOffIcon /> : <EyeIcon />}
-                  </button>
+                  <div className="layer-row-actions" aria-label={`${layerLabel(layer.id, index, layers.length)} actions`}>
+                    <div className="layer-order-actions" role="group" aria-label="Layer order">
+                      <button
+                        type="button"
+                        className="icon-button layer-order-button"
+                        aria-label="Move layer up"
+                        title="Move layer up"
+                        disabled={arrayIndex === layers.length - 1}
+                        onClick={() => moveLayer(layer.id, 1)}
+                      >
+                        <ArrowUpIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button layer-order-button"
+                        aria-label="Move layer down"
+                        title="Move layer down"
+                        disabled={arrayIndex === 0}
+                        onClick={() => moveLayer(layer.id, -1)}
+                      >
+                        <ArrowDownIcon />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button layer-visibility"
+                      aria-label={layer.visible === false ? "Show layer" : "Hide layer"}
+                      aria-pressed={layer.visible !== false}
+                      title={layer.visible === false ? "Show layer" : "Hide layer"}
+                      onClick={() => toggleVisibility(layer.id)}
+                    >
+                      {layer.visible === false ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
                 </article>
               );
             })}
@@ -448,8 +483,8 @@ export function SquircleEditor({
               {...sceneConfig}
               theme={activeTheme}
               ariaLabel="Editable squircle composition"
-              onLayerSelect={(id) => {
-                setSelectedId(id);
+              onLayerClick={({ layerId }) => {
+                setSelectedId(layerId);
                 setEditingState("base");
               }}
             />
@@ -527,7 +562,7 @@ export function SquircleEditor({
                     onChange={(prismHeight) => updateLayerGeometry({ prismHeight })}
                   />
                   <RangeField
-                    label="Dash size"
+                    label="Line size"
                     value={selectedGeometry.inlayScale * 100}
                     min={MIN_INLAY_SCALE * 100}
                     max={MAX_INLAY_SCALE * 100}
@@ -562,9 +597,9 @@ export function SquircleEditor({
                       }));
                     }}
                   />
-                  {selectedLayer.hover ? (
+                  {selectedHover ? (
                     <VariantControls
-                      variant={{ ...selectedLayer.base, ...selectedLayer.hover }}
+                      variant={{ ...selectedLayer.base, ...(selectedHover ?? {}) }}
                       onChange={updateHover}
                     />
                   ) : null}
@@ -589,12 +624,15 @@ export function SquircleEditor({
                   onChange={(wire) => updateLayer(selectedLayer.id, (layer) => ({ ...layer, stroke: { ...layer.stroke, wire } }))}
                 />
                 <RangeField
-                  label="Dash"
-                  value={selectedLayer.stroke?.dash ?? 2.2}
+                  label="Line"
+                  value={selectedLayer.stroke?.line ?? selectedLayer.stroke?.wireLine ?? 2.2}
                   min={0.6}
                   max={5}
                   step={0.1}
-                  onChange={(dash) => updateLayer(selectedLayer.id, (layer) => ({ ...layer, stroke: { ...layer.stroke, dash } }))}
+                  onChange={(line) => updateLayer(selectedLayer.id, (layer) => ({
+                    ...layer,
+                    stroke: { ...layer.stroke, line, wireLine: line }
+                  }))}
                 />
                 <RangeField
                   label="Text outline"
@@ -687,7 +725,7 @@ function VariantControls({
         value={paletteIdForEditor(variant.paletteId)}
         onChange={(paletteId) => onChange({ paletteId })}
       />
-      {material === "solid" ? (
+      {materialSupportsEffect(material) ? (
         <SegmentedField
           label="Effect"
           value={variantEffect(variant)}
@@ -706,16 +744,17 @@ function VariantControls({
             : { text: false, textColor: undefined }
           )}
         />
-        <FeatureSwitch
-          label="Dash"
-          checked={variant.dash ?? false}
-          title="Toggle the dashed inlay for this state."
-          onChange={(enabled) => onChange(enabled
-            ? { dash: true, dashColor: variantDashColor(variant) }
-            : { dash: false, dashColor: undefined }
-          )}
-        />
       </div>
+
+      <SegmentedField
+        label="Line"
+        value={variantLineStyle(variant)}
+        options={LINE_OPTIONS}
+        onChange={(line) => onChange(line === "off"
+          ? { line: false, lineColor: undefined }
+          : { line, lineColor: variantLineColor(variant) }
+        )}
+      />
 
       {variantHasText(variant) ? (
         <div className="nested-fields">
@@ -754,13 +793,13 @@ function VariantControls({
         </div>
       ) : null}
 
-      {variant.dash ? (
+      {variantLineStyle(variant) !== "off" ? (
         <div className="nested-fields">
           <AnnotationColorField
-            label="Dash color"
-            value={variantDashColor(variant)}
-            forcedValue={forcedDashColor(variant)}
-            onChange={(dashColor) => onChange({ dashColor })}
+            label="Line color"
+            value={variantLineColor(variant)}
+            forcedValue={forcedLineColor(variant)}
+            onChange={(lineColor) => onChange({ lineColor })}
           />
         </div>
       ) : null}
@@ -971,6 +1010,22 @@ function EyeOffIcon() {
   );
 }
 
+function ArrowUpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 19V5M6 11l6-6 6 6" />
+    </svg>
+  );
+}
+
+function ArrowDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 5v14M6 13l6 6 6-6" />
+    </svg>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -990,9 +1045,9 @@ function CodeIcon() {
 function summary(variant: SquircleVariantConfig): string {
   const parts = [materialLabel(variant.material ?? "wireframe"), getPalette(variant.paletteId).label];
   const effect = variantEffect(variant);
-  if ((variant.material ?? "wireframe") === "solid" && effect !== "off") parts.push(effect);
+  if (materialSupportsEffect(variant.material ?? "wireframe") && effect !== "off") parts.push(effect);
   if (variantHasText(variant)) parts.push(`text: ${variantTextValue(variant)}`);
-  if (variant.dash) parts.push("dash");
+  if (variant.line) parts.push(`${variant.line} line`);
   return parts.join(" / ");
 }
 
@@ -1005,14 +1060,18 @@ function paletteIdForEditor(paletteId: string | undefined): string {
 }
 
 function variantEffect(variant: SquircleVariantConfig): SquircleEffect {
-  if (variant.effect === "fluid" || variant.effect === "frosted") return variant.effect;
+  if (variant.effect === "metal") return variant.effect;
   return "off";
 }
 
 function materialLabel(material: SquircleMaterial): string {
-  if (material === "transparent") return "Glass";
+  if (material === "transparent") return "Transparent";
   if (material === "solid") return "Solid";
   return "Wire";
+}
+
+function materialSupportsEffect(material: SquircleMaterial): boolean {
+  return material !== "wireframe";
 }
 
 function layerLabel(_id: string, index: number, _total: number): string {
@@ -1102,7 +1161,7 @@ function isPersistedEditorState(value: unknown): value is PersistedEditorState {
   const validEditingState = record.editingState === undefined || record.editingState === "base" || record.editingState === "hover";
   const validSelectedId = record.selectedId === undefined || record.selectedId === null || typeof record.selectedId === "string";
 
-  return record.version === 1
+  return record.version === 3
     && (record.layers === undefined || Array.isArray(record.layers))
     && (record.geometry === undefined || typeof record.geometry === "object")
     && validTheme
@@ -1113,29 +1172,33 @@ function isPersistedEditorState(value: unknown): value is PersistedEditorState {
 
 function variantHasText(variant: SquircleVariantConfig): boolean {
   if (typeof variant.text === "string") return variant.text.trim().length > 0;
-  return variant.text === true || legacyVariant(variant).gpu === true;
+  return false;
+}
+
+function editableHoverVariant(hover: SquircleLayerConfig["hover"]): SquircleVariantConfig | undefined {
+  return hover && typeof hover !== "function" ? hover : undefined;
 }
 
 function variantTextValue(variant: SquircleVariantConfig): string {
   if (typeof variant.text === "string") return variant.text;
-  if (variant.text === true || legacyVariant(variant).gpu) return DEFAULT_TEXT;
   return DEFAULT_TEXT;
 }
 
 function variantTextStyle(variant: SquircleVariantConfig): "solid" | "wireframe" {
-  return variant.textStyle ?? legacyVariant(variant).gpuStyle ?? "solid";
+  return variant.textStyle ?? "solid";
 }
 
 function variantTextColor(variant: SquircleVariantConfig): EditorAnnotationColor {
-  return normalizeAnnotationColor(variant.textColor ?? legacyVariant(variant).gpuColor ?? "contrast");
+  return variant.textColor ?? "auto";
 }
 
-function variantDashColor(variant: SquircleVariantConfig): EditorAnnotationColor {
-  return normalizeAnnotationColor(variant.dashColor ?? "contrast");
+function variantLineStyle(variant: SquircleVariantConfig): EditorLineOption {
+  if (variant.line === "solid" || variant.line === "dotted" || variant.line === "dashed") return variant.line;
+  return "off";
 }
 
-function normalizeAnnotationColor(color: SquircleAnnotationColor): EditorAnnotationColor {
-  return color === "contrast" ? "auto" : color;
+function variantLineColor(variant: SquircleVariantConfig): EditorAnnotationColor {
+  return variant.lineColor ?? "auto";
 }
 
 function forcedTextColor(variant: SquircleVariantConfig): string | null {
@@ -1143,10 +1206,6 @@ function forcedTextColor(variant: SquircleVariantConfig): string | null {
   return variantTextStyle(variant) === "wireframe" ? "Wire gradient" : "Surface gradient";
 }
 
-function forcedDashColor(variant: SquircleVariantConfig): string | null {
+function forcedLineColor(variant: SquircleVariantConfig): string | null {
   return (variant.material ?? "wireframe") === "wireframe" ? "Wire gradient" : null;
-}
-
-function legacyVariant(variant: SquircleVariantConfig): LegacyTextVariantConfig {
-  return variant as SquircleVariantConfig & LegacyTextVariantConfig;
 }

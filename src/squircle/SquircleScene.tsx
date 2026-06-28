@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import type { CSSProperties, SVGProps } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, SVGProps } from "react";
 import { createSquircleGeometry, pointsToString } from "./geometry";
 import {
   DEFAULT_PALETTE_ID,
@@ -11,8 +11,10 @@ import type { SquircleGradientStop } from "./palettes";
 import type {
   SquircleAnnotationColor,
   SquircleGeometryConfig,
+  SquircleLayerClickEvent,
   SquircleLayerConfig,
   SquircleLayerGeometryConfig,
+  SquircleLineStyle,
   SquircleMaterial,
   SquircleOpacityConfig,
   SquircleSceneProps,
@@ -30,8 +32,8 @@ const DEFAULT_STROKES: SquircleStrokeConfig = {
   wireOpacity: 0.88,
   hidden: 1.2,
   hiddenOpacity: 0.28,
-  dash: 2.2,
-  wireDash: 1.6,
+  line: 2.2,
+  wireLine: 1.6,
   labelWire: 1.1
 };
 
@@ -46,8 +48,11 @@ const DEFAULT_TEXT_SIZE = 62;
 const DEFAULT_TEXT_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 const DEFAULT_TEXT_FONT_WEIGHT = 400;
 const DEFAULT_EFFECT: SquircleEffect = "off";
+const MOTION_INTERVAL_MS = 33;
+const motionClockSubscribers = new Set<(time: number) => void>();
+let motionClockInterval: number | null = null;
 
-const FLUID_BASE_BLOBS = [
+const METAL_BASE_BLOBS = [
   { x: -1.12, y: -1.04, r: 0.48, slot: 0, i: 0, sp: 0.95, ax: 0.23, ay: 0.21, ar: 0.018 },
   { x: -0.58, y: -0.7, r: 0.49, slot: 1, i: 1, sp: 1.1, ax: 0.24, ay: 0.2, ar: 0.018 },
   { x: -0.1, y: -0.16, r: 0.47, slot: 2, i: 2, sp: 0.9, ax: 0.22, ay: 0.23, ar: 0.016 },
@@ -58,22 +63,11 @@ const FLUID_BASE_BLOBS = [
   { x: -0.54, y: 1.14, r: 0.48, slot: 3, i: 7, sp: 1.0, ax: 0.24, ay: 0.22, ar: 0.018 }
 ];
 
-const FLUID_LIGHT_BLOBS = [
+const METAL_LIGHT_BLOBS = [
   { x: -0.82, y: -0.44, r: 0.48, slot: 0, i: 8, sp: 1.7, ax: 0.25, ay: 0.23, ar: 0.016 },
   { x: -0.2, y: -1.08, r: 0.47, slot: 1, i: 9, sp: 1.45, ax: 0.24, ay: 0.22, ar: 0.016 },
   { x: 0.66, y: 0.0, r: 0.49, slot: 0, i: 10, sp: 2.0, ax: 0.23, ay: 0.25, ar: 0.016 },
   { x: 1.12, y: 0.94, r: 0.47, slot: 1, i: 11, sp: 1.6, ax: 0.25, ay: 0.23, ar: 0.016 }
-];
-
-const FROSTED_BLOBS = [
-  { x: -1.08, y: -0.96, r: 0.47, slot: 0, i: 12, sp: 0.75, ax: 0.2, ay: 0.19, ar: 0.016 },
-  { x: -0.56, y: -0.46, r: 0.49, slot: 1, i: 13, sp: 0.9, ax: 0.21, ay: 0.2, ar: 0.016 },
-  { x: 0.02, y: 0.02, r: 0.47, slot: 2, i: 14, sp: 0.8, ax: 0.2, ay: 0.21, ar: 0.016 },
-  { x: 0.64, y: -0.6, r: 0.48, slot: 3, i: 15, sp: 1.0, ax: 0.21, ay: 0.19, ar: 0.016 },
-  { x: 1.12, y: 0.2, r: 0.46, slot: 1, i: 16, sp: 0.85, ax: 0.2, ay: 0.21, ar: 0.016 },
-  { x: 0.74, y: 1.08, r: 0.49, slot: 2, i: 17, sp: 0.95, ax: 0.21, ay: 0.2, ar: 0.016 },
-  { x: -0.14, y: 1.16, r: 0.47, slot: 0, i: 18, sp: 0.82, ax: 0.2, ay: 0.21, ar: 0.016 },
-  { x: -1.04, y: 0.58, r: 0.48, slot: 3, i: 19, sp: 1.05, ax: 0.21, ay: 0.2, ar: 0.016 }
 ];
 
 type ResolvedVariant = {
@@ -81,13 +75,13 @@ type ResolvedVariant = {
   paletteId: string;
   effect: SquircleEffect;
   text: string | null;
-  dash: boolean;
+  line: SquircleLineStyle | null;
   textStyle: SquircleTextStyle;
-  textColor: Exclude<SquircleAnnotationColor, "auto">;
+  textColor: SquircleAnnotationColor;
   textSize: number;
   textFontFamily: string;
   textFontWeight: string | number;
-  dashColor: Exclude<SquircleAnnotationColor, "auto">;
+  lineColor: SquircleAnnotationColor;
   stroke: SquircleStrokeConfig;
   opacity: SquircleOpacityConfig;
 };
@@ -105,12 +99,6 @@ type RenderPalette = {
   effectColors: EffectColorSet;
 };
 
-interface LegacyTextVariantConfig {
-  gpu?: boolean;
-  gpuStyle?: SquircleTextStyle | string;
-  gpuColor?: SquircleAnnotationColor;
-}
-
 export function SquircleScene({
   layers,
   geometry,
@@ -121,7 +109,7 @@ export function SquircleScene({
   ariaLabel = "Squircle scene",
   fitToLayers = true,
   transitionMs = 220,
-  onLayerSelect
+  onLayerClick
 }: SquircleSceneProps) {
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const prefix = idPrefix ?? `sq-${reactId}`;
@@ -150,11 +138,107 @@ export function SquircleScene({
       ? createLayerGeometry(geometry, viewBoxHeight, layer.geometry)
       : sceneGeometry;
 
-    return { layer, prefix: layerPrefix, geometry: layerGeometry };
+    return { layer, index, prefix: layerPrefix, geometry: layerGeometry };
   }), [geometry, prefix, sceneGeometry, viewBoxHeight, visibleLayers]);
+  const layerEventModels = useMemo(() => new Map(
+    layerModels.map(({ layer, index }) => [layer.id, { layer, index }])
+  ), [layerModels]);
   const svgStyle = { "--sq-transition-ms": `${transitionMs}ms` } as CSSProperties;
-  const motionEnabled = visibleLayers.some(layerHasAnimatedSurface);
+  const hoveredLayerIdRef = useRef<string | null>(null);
+  const [resolvedHoverState, setResolvedHoverState] = useState<ResolvedHoverState>({ layerId: null, visible: false });
+  const resolvedHoverFrameRef = useRef<number | null>(null);
+  const resolvedHoverClearTimerRef = useRef<number | null>(null);
+  const hasHoverResolver = layerModels.some(({ layer }) => typeof layer.hover === "function");
+  const motionEnabled = layerModels.some(({ layer, index }) => {
+    if (layerHasAnimatedSurface(layer)) return true;
+    const hover = resolveLayerHover(layer, index, visibleLayers, resolvedHoverState.layerId, resolvedHoverState.visible);
+    if (!hover?.enabled) return false;
+    const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+    return variantHasAnimatedSurface(hoverVariant);
+  });
   const motionTime = useMotionTime(motionEnabled);
+
+  useEffect(() => () => {
+    if (resolvedHoverFrameRef.current !== null) {
+      window.cancelAnimationFrame(resolvedHoverFrameRef.current);
+    }
+    if (resolvedHoverClearTimerRef.current !== null) {
+      window.clearTimeout(resolvedHoverClearTimerRef.current);
+    }
+  }, []);
+
+  const handlePointerOver = hasHoverResolver
+    ? (event: ReactPointerEvent<SVGSVGElement>) => {
+        const layerElement = closestLayerElement(event.target, event.currentTarget);
+        const layerId = layerElement?.dataset.layerId;
+        if (!layerElement || !layerId || hoveredLayerIdRef.current === layerId) return;
+
+        hoveredLayerIdRef.current = layerId;
+        showResolvedHover(layerId);
+      }
+    : undefined;
+  const handlePointerOut = hasHoverResolver
+    ? (event: ReactPointerEvent<SVGSVGElement>) => {
+        const layerElement = closestLayerElement(event.target, event.currentTarget);
+        const layerId = layerElement?.dataset.layerId;
+        if (!layerElement || !layerId) return;
+
+        const nextLayerElement = closestLayerElement(event.relatedTarget, event.currentTarget);
+        const nextLayerId = nextLayerElement?.dataset.layerId ?? null;
+        if (nextLayerId === layerId) return;
+
+        if (!nextLayerId && hoveredLayerIdRef.current === layerId) {
+          hoveredLayerIdRef.current = null;
+          hideResolvedHover();
+        }
+      }
+    : undefined;
+  const handleClick = onLayerClick
+    ? (event: ReactMouseEvent<SVGSVGElement>) => {
+        const layerElement = closestLayerElement(event.target, event.currentTarget);
+        const layerId = layerElement?.dataset.layerId;
+        if (!layerElement || !layerId) return;
+
+        const model = layerEventModels.get(layerId);
+        if (!model) return;
+        onLayerClick?.(createLayerClickEvent(model.layer, model.index, layerElement, event));
+      }
+    : undefined;
+
+  function clearResolvedHoverTimers() {
+    if (resolvedHoverFrameRef.current !== null) {
+      window.cancelAnimationFrame(resolvedHoverFrameRef.current);
+      resolvedHoverFrameRef.current = null;
+    }
+    if (resolvedHoverClearTimerRef.current !== null) {
+      window.clearTimeout(resolvedHoverClearTimerRef.current);
+      resolvedHoverClearTimerRef.current = null;
+    }
+  }
+
+  function showResolvedHover(layerId: string) {
+    clearResolvedHoverTimers();
+    setResolvedHoverState({ layerId, visible: false });
+    resolvedHoverFrameRef.current = window.requestAnimationFrame(() => {
+      resolvedHoverFrameRef.current = null;
+      setResolvedHoverState((current) => (
+        current.layerId === layerId ? { layerId, visible: true } : current
+      ));
+    });
+  }
+
+  function hideResolvedHover() {
+    clearResolvedHoverTimers();
+    setResolvedHoverState((current) => (
+      current.layerId ? { ...current, visible: false } : current
+    ));
+    resolvedHoverClearTimerRef.current = window.setTimeout(() => {
+      resolvedHoverClearTimerRef.current = null;
+      setResolvedHoverState((current) => (
+        current.visible ? current : { layerId: null, visible: false }
+      ));
+    }, transitionMs);
+  }
 
   return (
     <svg
@@ -164,19 +248,22 @@ export function SquircleScene({
       role="img"
       aria-label={ariaLabel}
       style={svgStyle}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+      onClick={handleClick}
     >
       {layerModels.map((model) => (
         <SquircleDefinitions key={`${model.prefix}-defs`} prefix={model.prefix} geometry={model.geometry} />
       ))}
-      {layerModels.map(({ layer, prefix: layerPrefix, geometry: layerGeometry }) => (
+      {layerModels.map(({ layer, index, prefix: layerPrefix, geometry: layerGeometry }) => (
         <SquircleLayer
           key={layer.id}
           layer={layer}
+          hover={resolveLayerHover(layer, index, visibleLayers, resolvedHoverState.layerId, resolvedHoverState.visible)}
           geometry={layerGeometry}
           prefix={layerPrefix}
           motionTime={motionTime}
           selected={selectedLayerId === layer.id}
-          onSelect={onLayerSelect}
         />
       ))}
     </svg>
@@ -212,7 +299,7 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
         <polygon points={topPoints} />
       </clipPath>
       <filter
-        id={`${prefix}-fluid-main-blur`}
+        id={`${prefix}-metal-main-blur`}
         filterUnits="userSpaceOnUse"
         primitiveUnits="userSpaceOnUse"
         x={-filterExtent}
@@ -223,18 +310,7 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
         <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
       <filter
-        id={`${prefix}-fluid-light-blur`}
-        filterUnits="userSpaceOnUse"
-        primitiveUnits="userSpaceOnUse"
-        x={-filterExtent}
-        y={-filterExtent}
-        width={filterSize}
-        height={filterSize}
-      >
-        <feGaussianBlur stdDeviation={planeBlur} />
-      </filter>
-      <filter
-        id={`${prefix}-frosted-blur`}
+        id={`${prefix}-metal-light-blur`}
         filterUnits="userSpaceOnUse"
         primitiveUnits="userSpaceOnUse"
         x={-filterExtent}
@@ -310,22 +386,24 @@ function LinearGradient({
 
 function SquircleLayer({
   layer,
+  hover,
   geometry,
   prefix,
   motionTime,
-  selected,
-  onSelect
+  selected
 }: {
   layer: SquircleLayerConfig;
+  hover: RenderHoverConfig | null;
   geometry: ReturnType<typeof createSquircleGeometry>;
   prefix: string;
   motionTime: number;
   selected: boolean;
-  onSelect?: (layerId: string) => void;
 }) {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
-  const hover = layer.hover ? resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity) : null;
-  const hasHover = Boolean(hover && variantSignature(hover) !== variantSignature(base));
+  const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
+  const hasHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+  const cssHover = Boolean(hasHover && hover?.mode === "css");
+  const controlledHoverEnabled = Boolean(hasHover && hover?.mode === "controlled" && hover.enabled);
   const x = layer.offset?.x ?? 0;
   const y = layer.offset?.y ?? 0;
 
@@ -333,19 +411,83 @@ function SquircleLayer({
     <g
       className={[
         "sq-layer",
-        hasHover ? "sq-has-hover" : "",
+        cssHover ? "sq-has-hover" : "",
+        controlledHoverEnabled ? "sq-hover-enabled" : "",
         selected ? "is-selected" : "",
         layer.className
       ].filter(Boolean).join(" ")}
       data-layer-id={layer.id}
       data-hover-enabled={String(hasHover)}
+      data-hover-mode={hover?.mode ?? "none"}
+      data-hover-visible={String(controlledHoverEnabled)}
       transform={`translate(${x} ${y})`}
-      onClick={onSelect ? () => onSelect(layer.id) : undefined}
     >
       <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionTime={motionTime} />
-      {hasHover && hover ? <SquircleVariant className="sq-hover" variant={hover} geometry={geometry} prefix={prefix} motionTime={motionTime} /> : null}
+      {hasHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionTime={motionTime} /> : null}
     </g>
   );
+}
+
+type RenderHoverConfig = {
+  enabled: boolean;
+  mode: "css" | "controlled";
+  variant: SquircleVariantConfig;
+};
+
+type ResolvedHoverState = {
+  layerId: string | null;
+  visible: boolean;
+};
+
+function resolveLayerHover(
+  layer: SquircleLayerConfig,
+  index: number,
+  layers: SquircleLayerConfig[],
+  hoveredLayerId: string | null,
+  visible: boolean
+): RenderHoverConfig | null {
+  if (!layer.hover) return null;
+  if (typeof layer.hover !== "function") {
+    return { enabled: false, mode: "css", variant: layer.hover };
+  }
+  if (!hoveredLayerId) return null;
+
+  const hoveredIndex = layers.findIndex((candidate) => candidate.id === hoveredLayerId);
+  const hoveredLayer = hoveredIndex >= 0 ? layers[hoveredIndex] : null;
+  if (!hoveredLayer) return null;
+
+  const variant = layer.hover({
+    layer,
+    index,
+    layers,
+    hoveredLayerId,
+    hoveredLayer,
+    hoveredIndex
+  });
+
+  return variant ? { enabled: visible, mode: "controlled", variant } : null;
+}
+
+function createLayerClickEvent(
+  layer: SquircleLayerConfig,
+  index: number,
+  layerElement: SVGGElement,
+  event: ReactMouseEvent<SVGSVGElement>
+): SquircleLayerClickEvent {
+  return {
+    layerId: layer.id,
+    layer,
+    index,
+    layerElement,
+    event
+  };
+}
+
+function closestLayerElement(target: EventTarget | null, root: SVGSVGElement): SVGGElement | null {
+  if (!(target instanceof Element)) return null;
+  const layerElement = target.closest<SVGGElement>(".sq-layer[data-layer-id]");
+  if (!layerElement || !root.contains(layerElement)) return null;
+  return layerElement;
 }
 
 function SquircleVariant({
@@ -423,12 +565,14 @@ function SquircleVariant({
           />
         </>
       )}
-      {variant.dash ? (
+      {variant.line ? (
         <polygon
-          className="sq-inlay"
+          className="sq-line"
           points={inlayPoints}
-          stroke={dashPaint(variant, palette, topFill)}
-          strokeWidth={variant.material === "wireframe" ? variant.stroke.wireDash : variant.stroke.dash}
+          stroke={linePaint(variant, palette, topFill)}
+          strokeWidth={variant.material === "wireframe" ? variant.stroke.wireLine : variant.stroke.line}
+          strokeDasharray={lineDasharray(variant.line)}
+          strokeLinecap={lineStrokeLinecap(variant.line)}
           opacity={annotationOpacity(variant)}
         />
       ) : null}
@@ -470,7 +614,8 @@ function SolidTopFace({
   motionTime: number;
 }) {
   const fillOpacity = variant.material === "transparent" ? variant.opacity.transparentFace : 1;
-  const effect = variant.material === "solid" ? variant.effect : "off";
+  const effect = variant.material === "wireframe" ? "off" : variant.effect;
+  const effectOpacity = variant.material === "transparent" ? fillOpacity : 1;
   const halfSize = geometry.config.halfSize;
   const baseRect = {
     x: -halfSize * 1.3,
@@ -478,10 +623,10 @@ function SolidTopFace({
     size: halfSize * 2.6
   };
 
-  if (effect === "fluid") {
+  if (effect === "metal") {
     return (
       <>
-        <g className="sq-top-effect sq-top-effect-fluid" clipPath={`url(#${topClipId})`}>
+        <g className="sq-top-effect sq-top-effect-metal" clipPath={`url(#${topClipId})`} opacity={effectOpacity}>
           <g transform={geometry.labelTransform}>
             <rect
               x={baseRect.x}
@@ -490,13 +635,13 @@ function SolidTopFace({
               height={baseRect.size}
               fill={palette.effectColors[3]}
             />
-            <g filter={`url(#${prefix}-fluid-main-blur)`}>
-              {FLUID_BASE_BLOBS.map((blob) => (
+            <g filter={`url(#${prefix}-metal-main-blur)`}>
+              {METAL_BASE_BLOBS.map((blob) => (
                 <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
               ))}
             </g>
-            <g filter={`url(#${prefix}-fluid-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
-              {FLUID_LIGHT_BLOBS.map((blob) => (
+            <g filter={`url(#${prefix}-metal-light-blur)`} opacity={0.6} style={{ mixBlendMode: "screen" }}>
+              {METAL_LIGHT_BLOBS.map((blob) => (
                 <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
               ))}
             </g>
@@ -509,46 +654,6 @@ function SolidTopFace({
           stroke={palette.topEdge}
           strokeWidth={variant.stroke.face}
           strokeOpacity={variant.stroke.faceOpacity}
-        />
-      </>
-    );
-  }
-
-  if (effect === "frosted") {
-    return (
-      <>
-        <g className="sq-top-effect sq-top-effect-frosted" clipPath={`url(#${topClipId})`}>
-          <g transform={geometry.labelTransform}>
-            <rect
-              x={baseRect.x}
-              y={baseRect.y}
-              width={baseRect.size}
-              height={baseRect.size}
-              fill={palette.effectColors[6]}
-            />
-            <g filter={`url(#${prefix}-frosted-blur)`}>
-              {FROSTED_BLOBS.map((blob) => (
-                <MotionBlob key={blob.i} blob={blob} palette={palette} geometry={geometry} motionTime={motionTime} />
-              ))}
-            </g>
-          </g>
-          <polygon points={topPoints} fill="#eef2ff" opacity={0.16} />
-        </g>
-        <polygon
-          className="sq-face sq-solid-top sq-effect-outline"
-          points={topPoints}
-          fill="none"
-          stroke={palette.topEdge}
-          strokeWidth={variant.stroke.face}
-          strokeOpacity={variant.stroke.faceOpacity}
-        />
-        <polygon
-          className="sq-face sq-frosted-rim"
-          points={topPoints}
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth={Math.max(0.7, variant.stroke.face * 1.8)}
-          strokeOpacity={0.52}
         />
       </>
     );
@@ -619,26 +724,21 @@ function resolveVariant(
     material: variant.material ?? "wireframe",
     paletteId: resolvePaletteId(variant.paletteId),
     effect: normalizeEffect(variant.effect ?? DEFAULT_EFFECT),
-    text: normalizeTextValue(variant.text, legacyVariant(variant).gpu),
-    dash: variant.dash ?? false,
-    textStyle: normalizeTextStyle(variant.textStyle ?? legacyVariant(variant).gpuStyle ?? "solid"),
-    textColor: normalizeAnnotationColor(variant.textColor ?? legacyVariant(variant).gpuColor ?? "contrast"),
+    text: normalizeTextValue(variant.text),
+    line: normalizeLineStyle(variant.line),
+    textStyle: normalizeTextStyle(variant.textStyle ?? "solid"),
+    textColor: variant.textColor ?? "auto",
     textSize: variant.textSize ?? DEFAULT_TEXT_SIZE,
     textFontFamily: variant.textFontFamily ?? DEFAULT_TEXT_FONT_FAMILY,
     textFontWeight: variant.textFontWeight ?? DEFAULT_TEXT_FONT_WEIGHT,
-    dashColor: normalizeAnnotationColor(variant.dashColor ?? "contrast"),
+    lineColor: variant.lineColor ?? "auto",
     stroke: { ...DEFAULT_STROKES, ...layerStroke, ...variant.stroke },
     opacity: { ...DEFAULT_OPACITY, ...layerOpacity, ...variant.opacity }
   };
 }
 
-function legacyVariant(variant: SquircleVariantConfig): LegacyTextVariantConfig {
-  return variant as SquircleVariantConfig & LegacyTextVariantConfig;
-}
-
-function normalizeTextValue(value: SquircleVariantConfig["text"], legacyGpu: boolean | undefined): string | null {
+function normalizeTextValue(value: SquircleVariantConfig["text"]): string | null {
   if (typeof value === "string") return value.trim() ? value : null;
-  if (value === true || legacyGpu) return DEFAULT_TEXT;
   return null;
 }
 
@@ -647,28 +747,38 @@ function normalizeTextStyle(style: SquircleTextStyle | string): SquircleTextStyl
 }
 
 function normalizeEffect(effect: SquircleEffect | string): SquircleEffect {
-  if (effect === "fluid" || effect === "frosted") return effect;
+  if (effect === "metal") return effect;
   return "off";
+}
+
+function normalizeLineStyle(line: SquircleVariantConfig["line"]): SquircleLineStyle | null {
+  if (line === "solid" || line === "dotted" || line === "dashed") return line;
+  return null;
 }
 
 function resolvePaletteId(paletteId: string | undefined): string {
   return isSquirclePaletteId(paletteId) ? paletteId : DEFAULT_PALETTE_ID;
 }
 
-function normalizeAnnotationColor(color: SquircleAnnotationColor): Exclude<SquircleAnnotationColor, "auto"> {
-  return color === "auto" ? "contrast" : color;
-}
-
 function annotationPaint(color: SquircleAnnotationColor, labelFill: string): string {
-  const normalized = normalizeAnnotationColor(color);
-  if (normalized === "white") return "#ffffff";
-  if (normalized === "black") return "#05070a";
+  if (color === "white") return "#ffffff";
+  if (color === "black") return "#05070a";
   return labelFill;
 }
 
-function dashPaint(variant: ResolvedVariant, palette: RenderPalette, topFill: string): string {
+function linePaint(variant: ResolvedVariant, palette: RenderPalette, topFill: string): string {
   if (variant.material === "wireframe") return topFill;
-  return annotationPaint(variant.dashColor, palette.labelFill);
+  return annotationPaint(variant.lineColor, palette.labelFill);
+}
+
+function lineDasharray(line: SquircleLineStyle): string | undefined {
+  if (line === "solid") return undefined;
+  if (line === "dotted") return "0 7";
+  return "9 8";
+}
+
+function lineStrokeLinecap(line: SquircleLineStyle): SVGProps<SVGPolygonElement>["strokeLinecap"] {
+  return line === "dotted" ? "round" : "round";
 }
 
 function annotationOpacity(variant: ResolvedVariant): number {
@@ -731,26 +841,48 @@ function useMotionTime(enabled: boolean): number {
       return undefined;
     }
 
-    const update = () => setTime(performance.now() / 1000);
-    update();
-    const interval = window.setInterval(update, 33);
+    const update = (nextTime: number) => setTime(nextTime);
+    update(performance.now() / 1000);
+    motionClockSubscribers.add(update);
+    startMotionClock();
 
-    return () => window.clearInterval(interval);
+    return () => {
+      motionClockSubscribers.delete(update);
+      stopMotionClockIfIdle();
+    };
   }, [enabled]);
 
   return enabled ? time : 0;
 }
 
+function startMotionClock() {
+  if (motionClockInterval !== null) return;
+
+  motionClockInterval = window.setInterval(() => {
+    const nextTime = performance.now() / 1000;
+    motionClockSubscribers.forEach((subscriber) => subscriber(nextTime));
+  }, MOTION_INTERVAL_MS);
+}
+
+function stopMotionClockIfIdle() {
+  if (motionClockSubscribers.size > 0 || motionClockInterval === null) return;
+
+  window.clearInterval(motionClockInterval);
+  motionClockInterval = null;
+}
+
 function layerHasAnimatedSurface(layer: SquircleLayerConfig): boolean {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   if (variantHasAnimatedSurface(base)) return true;
-  if (!layer.hover) return false;
-  const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
-  return variantHasAnimatedSurface(hover);
+  if (layer.hover && typeof layer.hover !== "function") {
+    const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
+    if (variantHasAnimatedSurface(hover)) return true;
+  }
+  return false;
 }
 
 function variantHasAnimatedSurface(variant: ResolvedVariant): boolean {
-  return variant.material === "solid" && variant.effect !== "off";
+  return variant.material !== "wireframe" && variant.effect !== "off";
 }
 
 function getRenderPalette(paletteId: string): RenderPalette {

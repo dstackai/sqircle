@@ -141,7 +141,8 @@ select {
 }
 
 .sq-hero-grid,
-.sq-demo-layout {
+.sq-demo-layout,
+.sq-event-layout {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(240px, 320px);
   gap: 18px;
@@ -172,7 +173,8 @@ select {
 }
 
 .sq-hero-stage,
-.sq-demo-stage {
+.sq-demo-stage,
+.sq-event-stage {
   min-height: 520px;
 }
 
@@ -300,10 +302,59 @@ select {
   padding: 14px 16px;
 }
 
+.sq-event-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.sq-event-state {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--page-line);
+}
+
+.sq-event-pill-row {
+  display: grid;
+  gap: 8px;
+}
+
+.sq-event-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--page-line);
+  border-radius: 6px;
+  background: var(--page-panel-soft);
+  color: var(--page-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.sq-event-pill small {
+  color: var(--page-muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.sq-event-pill.is-active {
+  border-color: color-mix(in srgb, var(--page-accent) 66%, var(--page-line));
+  background:
+    linear-gradient(90deg, var(--page-accent-soft), var(--page-panel-soft) 64%),
+    var(--page-control);
+  color: var(--page-text);
+}
+
 @media (max-width: 900px) {
   .sq-page-topbar,
   .sq-hero-grid,
   .sq-demo-layout,
+  .sq-event-layout,
   .sq-selected-single {
     grid-template-columns: 1fr;
   }
@@ -318,7 +369,8 @@ select {
   }
 
   .sq-hero-stage,
-  .sq-demo-stage {
+  .sq-demo-stage,
+  .sq-event-stage {
     min-height: 380px;
   }
 }

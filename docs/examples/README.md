@@ -6,6 +6,7 @@ The root HTML files are Vite shells. They should stay small and only mount React
 | --- | --- | --- |
 | `index.html` | `src/pages/IndexPage.tsx` | Hero scene plus selectable single-squircle state drawer |
 | `demo.html` | `src/pages/DemoPage.tsx` | Selectable generated gallery of 3-layer compositions |
+| `events.html` | `src/pages/EventDemoPage.tsx` | Focused function-hover example with sibling wireframe state |
 | `constructor.html` | `src/pages/ConstructorPage.tsx` | Full constructor UI using `SquircleEditor` |
 | `react.html` | `src/pages/ConstructorPage.tsx` | Compatibility alias for the constructor |
 
@@ -20,7 +21,8 @@ The examples must consume `SquircleScene`, `SquircleEditor`, palettes, and helpe
 ## Behavior
 
 - `index.html` renders a main three-layer scene and a collapsed/openable drawer of single-squircle states. Palette buttons recolor the examples through React state.
-- `demo.html` renders 96 generated composition presets, including alpha palettes and solid `off`/`fluid`/`frosted` surfaces. Clicking a card changes the main hero composition. Each layer hover is a state/color swap only.
+- `demo.html` renders 96 generated composition presets, including alpha palettes and filled `off`/`metal` surfaces. Clicking a card changes the main hero composition. Each layer hover remains a state/color swap only.
+- `events.html` is the minimal sibling-hover demo. It keeps one explicit three-layer scene and uses a shared `hover` resolver function so non-hovered layers crossfade to wireframe.
 - `constructor.html` renders `SquircleEditor` with three default plain wireframe layers. The left panel exposes scene camera; the inspector exposes per-layer geometry, palette, and effect controls. The Code panel exports React code using `@dstackai/sqircle` as the import path. It persists local editor state under `@dstackai/sqircle:constructor`.
 - `react.html` intentionally mirrors `constructor.html` for older links.
 
@@ -29,5 +31,6 @@ The examples must consume `SquircleScene`, `SquircleEditor`, palettes, and helpe
 - Keep root HTML files as shells with one `#root` and one module script.
 - Keep examples transparent-background friendly.
 - Keep hover effects as opacity crossfades between base and hover variants. Do not add movement, shadows, scale, filters, or gap changes.
+- Use function-valued `layer.hover` for sibling-hover interactions. Use layer events only when the host app needs external state outside the SVG.
 - Keep all squircle geometry, palette, stroke, annotation, and theme behavior in the reusable component layer.
 - If a legacy static behavior is still valuable, migrate it into `src/pages` or `src/squircle`; do not edit ignored snapshots as source.

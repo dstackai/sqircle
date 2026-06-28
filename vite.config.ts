@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         index: "index.html",
         demo: "demo.html",
+        events: "events.html",
         constructor: "constructor.html",
         react: "react.html"
       }

@@ -124,7 +124,7 @@ export function createSquircleLayers(
     id: `layer-${index + 1}`,
     visible: true,
     offset: { x: 0, y: (count - index - 1) * gap },
-    base: { material, paletteId, text: false, dash: false },
+    base: { material, paletteId, text: false, line: false },
     hover: undefined
   }));
 }

@@ -10,12 +10,6 @@ export interface SquircleReactCodeOptions {
   ariaLabel?: string;
 }
 
-interface LegacyTextVariantConfig {
-  gpu?: boolean;
-  gpuStyle?: "solid" | "wireframe";
-  gpuColor?: SquircleVariantConfig["textColor"];
-}
-
 export function createSquircleReactCode({
   layers,
   theme,
@@ -69,27 +63,21 @@ function layerForReactCode(layer: SquircleLayerConfig): SquircleLayerConfig {
   return pruneUndefined({
     ...layer,
     base: variantForReactCode(layer.base),
-    hover: layer.hover ? variantForReactCode(layer.hover) : undefined
+    hover: layer.hover && typeof layer.hover !== "function" ? variantForReactCode(layer.hover) : undefined
   });
 }
 
 function variantForReactCode(variant: SquircleVariantConfig): SquircleVariantConfig {
-  const { gpu, gpuStyle, gpuColor, ...rest } = variant as SquircleVariantConfig & LegacyTextVariantConfig;
-  const text = textForExport(rest.text, gpu);
-  const textStyle = rest.textStyle ?? gpuStyle;
-  const textColor = rest.textColor ?? gpuColor;
+  const text = textForExport(variant.text);
 
   return pruneUndefined({
-    ...rest,
-    text,
-    textStyle,
-    textColor
+    ...variant,
+    text
   });
 }
 
-function textForExport(text: SquircleVariantConfig["text"], legacyGpu: boolean | undefined): SquircleVariantConfig["text"] | undefined {
+function textForExport(text: SquircleVariantConfig["text"]): SquircleVariantConfig["text"] | undefined {
   if (typeof text === "string") return text;
-  if (text === true || legacyGpu) return "GPU";
   if (text === false) return false;
   return undefined;
 }

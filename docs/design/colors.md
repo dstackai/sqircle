@@ -19,7 +19,7 @@ All gradients use `gradientUnits="userSpaceOnUse"`.
 | Gradient family | Coordinates | Meaning |
 | --- | --- | --- |
 | `top-*` | `x1="0" y1="0" x2="800" y2="291.18"` | Top face bbox |
-| `gpu-surface-*` / `text-surface-*` | `x1="-425.63" y1="-0.1" x2="425.6" y2="0.07"` | Matching top-face stops remapped into the text label's local projected plane |
+| `text-surface-*` | `x1="-425.63" y1="-0.1" x2="425.6" y2="0.07"` | Matching top-face stops remapped into the text label's local projected plane |
 | `side-*` | `x1="0" y1="0" x2="800" y2="301.18"` | Full top-plus-wall silhouette bbox |
 
 The side gradient intentionally starts at `y=0`, not at the wall's visible `y=145.59`, so the side shadow continues from the same projected coordinate space.
@@ -48,7 +48,7 @@ Legacy static snapshots used CSS variables such as `--top-fill` and `--side-fill
 #variant-15:checked ~ .single-drawer {
   --top-fill: url("#top-15");
   --side-fill: url("#side-15");
-  --gpu-surface-fill: url("#gpu-surface-15");
+  --text-surface-fill: url("#text-surface-15");
   --label-fill: #f7fbff;
   --top-edge: #7c5fd0;
   --side-edge: #2d1466;
@@ -62,7 +62,7 @@ Every `.v13..v20` class must define the same core variables for variant cards:
   --top-fill: url("#top-15");
   --side-fill: url("#side-15");
   --label-fill: #f7fbff;
-  --gpu-surface-fill: url("#gpu-surface-15");
+  --text-surface-fill: url("#text-surface-15");
   --top-edge: #7c5fd0;
   --side-edge: #2d1466;
 }
@@ -72,17 +72,17 @@ Variant classes may also define fallback ghost colors, but those must remain vis
 
 ## Hover Palettes
 
-React examples and generated code can use any palette id as a layer's hover `paletteId`. The base variant keeps its normal palette, and the hover variant receives its own `paletteId`. This means hover color changes use the same documented gradients, label contrast, and wireframe stroke colors as normal rendering.
+React examples and generated code can use any palette id as a layer's hover `paletteId`. The base variant keeps its normal palette, and the hover variant receives its own `paletteId`. This means hover color changes use the same documented gradients, automatic annotation paint, and wireframe stroke colors as normal rendering.
 
 Do not implement hover color with filters, opacity hacks, or untracked ad hoc colors. Hover color is a normal palette swap. Hover `paletteId` may be the same id as the base `paletteId`; that is useful when hover should change only material while preserving color. If the resolved hover variant matches the base variant, `SquircleScene` should not render or crossfade a hover copy.
 
 ## Annotation Auto And Overrides
 
-React layers with `textColor: "contrast"` and `dashColor: "contrast"` use the palette's automatic annotation colors. Solid and transparent top-plane annotations use the palette `labelFill`. This applies to both filled text and solid dashed inlays, so default text + dash states keep one automatic contrast color.
+React layers with `textColor: "auto"` and `lineColor: "auto"` use the palette's automatic annotation colors. Solid and transparent top-plane annotations use the palette `labelFill`. This applies to both filled text and solid line inlays, so default text + line states keep one automatic annotation color.
 
 - Darker top gradients may use a near-white label. Current example: `15 Alpha` uses `#f7fbff`.
 - Lighter top gradients should use dark in-family annotation colors.
-- Do not add a second outline copy for automatic contrast.
+- Do not add a second outline copy for automatic annotation paint.
 
 Wireframe text labels ignore fixed label paint and use gradient wire paint:
 
@@ -94,26 +94,24 @@ stroke-width: var(--label-wire-width);
 
 Wireframe inlays use the top-face gradient.
 
-In React, `textStyle: "wireframe"` outlines the same live SVG text element used by filled mode. On solid/transparent material, outline paint comes from `textColor`; `contrast` resolves to `labelFill`, matching filled text and solid dash. On wireframe material, outline paint comes from label-local `textWire` gradients; do not sample the full-face top ramp there, and do not replace the text with single-stroke lettering.
+In React, `textStyle: "wireframe"` outlines the same live SVG text element used by filled mode. On solid/transparent material, outline paint comes from `textColor`; `auto` resolves to `labelFill`, matching filled text and solid line. On wireframe material, outline paint comes from label-local `textWire` gradients; do not sample the full-face top ramp there, and do not replace the text with single-stroke lettering.
 
 `SquircleVariantConfig` supports explicit annotation overrides:
 
 | Field | Values | Paint |
 | --- | --- | --- |
-| `textColor` | `contrast`, `white`, `black` | Filled or outlined text paint for solid/transparent material; `contrast` appears as `Auto` in the UI |
+| `textColor` | `auto`, `white`, `black` | Filled or outlined text paint for solid/transparent material |
 | `textStyle` | `solid`, `wireframe` | Filled or outlined text label |
-| `dashColor` | `contrast`, `white`, `black` | Dash stroke for solid/transparent material; `contrast` appears as `Auto` in the UI |
+| `lineColor` | `auto`, `white`, `black` | Line stroke for solid/transparent material |
 
-Use `Auto` when the annotation should follow the palette. The exported value is `contrast`. Use `white` or `black` only when the user deliberately wants fixed annotation paint. On wireframe material, dash always uses the top gradient; text uses the text surface gradient at full opacity when `textStyle` is `solid` and the text wire gradient when `textStyle` is `wireframe`.
-
-Deprecated `gpuColor` and `gpuStyle` aliases are accepted only for older snippets. Legacy configs with `gpuStyle: "transparent"` normalize to `solid`; there is no third text paint control.
+Use `auto` when the annotation should follow the palette. Use `white` or `black` only when the user deliberately wants fixed annotation paint. On wireframe material, line always uses the top gradient; text uses the text surface gradient at full opacity when `textStyle` is `solid` and the text wire gradient when `textStyle` is `wireframe`.
 
 ## Edge Colors
 
 Filled faces use:
 
-- `--top-edge` for `.active-top` and `.ghost-top`
-- `--side-edge` for `.active-side` and `.ghost-side`
+- `--top-edge` for filled top-face edges and legacy `.ghost-top` snapshots
+- `--side-edge` for filled side-wall edges and legacy `.ghost-side` snapshots
 - `--face-edge-width: 0.35`
 - `--face-edge-opacity: 0.72`
 

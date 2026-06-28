@@ -14,21 +14,20 @@ All face gradients use `gradientUnits="userSpaceOnUse"` and coordinates derived 
 
 Top gradients span only the top face. Side gradients span the full top-plus-wall silhouette so the shadow ramp continues in the same projected coordinate space instead of restarting on the wall.
 
-React uses `text-surface-*` gradients to remap the top face stops into the label's local projected plane. Static fixtures still use `gpu-surface-*` ids because those pages render the GPU example glyph. These gradients are used for `textStyle: "solid"` on wireframe material, where filled text should read as top-surface paint rather than wire stroke color.
+React uses `text-surface-*` gradients to remap the top face stops into the label's local projected plane. These gradients are used for `textStyle: "solid"` on wireframe material, where filled text should read as top-surface paint rather than wire stroke color.
 
 Wireframe mode uses the top gradient as the stroke gradient so upper and lower curves match. This intentionally avoids fake lighting on wireframes.
 
-## Solid Surface Effects
+## Filled Surface Effects
 
-`SquircleVariantConfig.effect` changes only the top-face rendering for `material: "solid"`. It is ignored by `transparent` and `wireframe`.
+`SquircleVariantConfig.effect` changes only the top-face rendering for filled materials: `material: "solid"` and `material: "transparent"`. It is ignored by `wireframe`.
 
 | Effect | Rendering |
 | --- | --- |
 | `off` | A static top polygon filled by the resolved top gradient. This is the default. |
-| `fluid` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
-| `frosted` | The same projected moving-blob field, muted by a deep base, then finished in screen space with a pale veil and a brighter neutral rim. |
+| `metal` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus blurred moving color blobs. A second lighter blurred layer uses screen blending. No displacement map is used. |
 
-The moving effects are interval-driven inside `SquircleScene`; they do not query the global DOM and they do not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid `fluid` or `frosted` state.
+The moving effect is interval-driven inside `SquircleScene`; it does not query the global DOM and it does not use `requestAnimationFrame`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` state.
 
 Effect color layers are authored in the flat top-face local coordinate system, not in screen coordinates. Local `(0, 0)` is the center of the raw superellipse, and local `a` is `geometry.config.halfSize`. The whole color field is then wrapped in the same isometric matrix used by labels:
 
@@ -36,7 +35,7 @@ Effect color layers are authored in the flat top-face local coordinate system, n
 matrix(cosA, sinA, -cosA, sinA, cx, cy - h)
 ```
 
-This means circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon. For `frosted`, the white veil and bright rim also stay in screen space; only the blob/color field is projected.
+This means circles are intentionally authored as local circles, then become foreshortened ellipses on the tilted top plane. The top clip path stays in screen space around the generated `topPoints` polygon.
 
 The SVG structure for effect faces must keep this order:
 
@@ -48,9 +47,8 @@ The SVG structure for effect faces must keep this order:
       <circle ... />
     </g>
   </g>
-  <!-- frost-only veil stays here in screen space -->
 </g>
-<!-- rim and outline stay here in screen space -->
+<!-- outline stays here in screen space -->
 ```
 
 Effect scale is always derived from `W = 2 * a`, the local top-plane width, not from screen pixels or the projected bbox:
@@ -66,11 +64,12 @@ The blur filters use `filterUnits="userSpaceOnUse"` and `primitiveUnits="userSpa
 Effect invariants:
 
 - The clip path uses the same generated `topPoints` polygon as the normal top face.
-- Fluid/frosted color blobs must never be placed directly in screen coordinates.
-- Fluid/frosted must not use `feDisplacementMap`; it turns the smooth surface field into raster clouds.
-- Annotations render after the effect, so text and dash stay readable and stay glued to the top plane.
+- Metal color blobs must never be placed directly in screen coordinates.
+- Metal must not use `feDisplacementMap`; it turns the smooth surface field into raster clouds.
+- Transparent material applies `transparentFace` opacity to the animated color field so effects do not make the top face fully opaque.
+- Annotations render after the effect, so text and line stay readable and stay glued to the top plane.
 - Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.
-- Effect colors are derived from the selected alpha palette's top and side stops, except neutral white veil/rim overlays used only for glassy sharpness.
+- Effect colors are derived from the selected alpha palette's top and side stops.
 
 ## Sharpness Edge
 
@@ -92,15 +91,20 @@ Each prism definition follows this order:
 
 The top face is drawn after the side wall, so it hides the back half of the extrusion without masks or z-buffering.
 
-## Inlay
+## Line Inlay
 
-The middle-layer dashed squircle is generated from the same superellipse at `0.6 * a` and projected at `z = h`, so it lies on the top plane. The static copies are:
+The middle-layer line squircle is generated from the same superellipse at `0.6 * a` and projected at `z = h`, so it lies on the top plane.
 
-`SquircleScene` renders the dashed inlay as the same top-plane polygon in every material. Paint changes by material:
+`SquircleScene` renders the line inlay as the same top-plane polygon in every material. `line` controls only the stroke pattern:
 
-By default, solid and transparent inlays use the palette label color, the same contrast token as filled text. Wireframe inlays use the top-face gradient, matching the prism wires.
+- `line: "solid"`: continuous stroke.
+- `line: "dotted"`: rounded dotted stroke.
+- `line: "dashed"`: rounded dashed stroke.
+- `line: false`: no inlay.
 
-`dashColor: "contrast"` keeps the material default. `dashColor: "white"` and `dashColor: "black"` intentionally use fixed stroke colors on solid/transparent material. Wireframe material ignores fixed dash color and uses the wire gradient.
+By default, solid and transparent inlays use the palette label color, the same automatic annotation paint as filled text. Wireframe inlays use the top-face gradient, matching the prism wires.
+
+`lineColor: "auto"` keeps the material default. `lineColor: "white"` and `lineColor: "black"` intentionally use fixed stroke colors on solid/transparent material. Wireframe material ignores fixed line color and uses the wire gradient.
 
 ## Label Source
 
@@ -145,8 +149,8 @@ The transform never changes between solid and wireframe modes; only paint change
 
 Solid text style:
 
-- The label uses palette label paint when `textColor` is `contrast`.
-- Solid/transparent dash uses the same palette label paint by default.
+- The label uses palette label paint when `textColor` is `auto`.
+- Solid/transparent line uses the same palette label paint by default.
 - `15 Alpha` uses `#f7fbff` because its top gradient is dark.
 - Lighter variants use dark in-family label fills.
 
@@ -154,16 +158,14 @@ Wireframe text style:
 
 - `textStyle: "wireframe"` uses the same live text element as filled mode.
 - It sets `fill: none` and uses a stroke.
-- On solid/transparent material, outline paint comes from `textColor`; `contrast` resolves to the palette label paint, matching filled text and solid dash.
+- On solid/transparent material, outline paint comes from `textColor`; `auto` resolves to the palette label paint, matching filled text and solid line.
 - On wireframe material, outline paint resolves to the label-local `textWire` gradient.
-- Wireframe dash uses the top-face gradient so dashed inlays match prism wires.
+- Wireframe line uses the top-face gradient so inlays match prism wires.
 - It must remain an outline around the font figures, not a single-stroke lettering replacement.
 - Keep the outline stroke thin relative to text size. The default `labelWire` is `1.1` at `textSize: 62`, safely below the ratio where counters start merging.
 
 Do not sample the full-face top ramp directly for the text outline on wireframe material; it is too large for the label geometry and makes the color read wrong. Use one text element for all text styles. Use `textColor` for solid/transparent outline paint and the label-local wire gradient for wireframe-material outline paint.
 
-Deprecated `gpuColor` aliases are accepted only for old snippets and map to React `textColor`. They override label paint only on solid/transparent material. On wireframe material, `textStyle: "solid"` renders a fully opaque filled label using the text surface gradient, and `textStyle: "wireframe"` renders an outlined label using the text wire gradient.
-
-Do not introduce `textStyle: "transparent"` as a third paint control. Legacy configs with `gpuStyle: "transparent"` should normalize to `solid`.
+Do not introduce `textStyle: "transparent"` as a third paint control. On wireframe material, `textStyle: "solid"` renders a fully opaque filled label using the text surface gradient, and `textStyle: "wireframe"` renders an outlined label using the text wire gradient.
 
 Do not build filled letters from `<rect>`, `<line>`, or separate stem/bowl paths. Do not add a second label copy and do not replace the text with monoline lettering for outline mode.
