@@ -108,5 +108,6 @@ export interface SquircleSceneProps {
   ariaLabel?: string;
   fitToLayers?: boolean;
   transitionMs?: number;
+  transitionConfigChanges?: boolean;
   onLayerClick?: SquircleLayerClickEventHandler;
 }

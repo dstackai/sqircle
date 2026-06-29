@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent, SVGProps } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, MutableRefObject, SVGProps } from "react";
 import { createSquircleGeometry, pointsToString } from "./geometry";
 import {
   DEFAULT_PALETTE_ID,
@@ -63,6 +63,8 @@ const GRAIN_OCTAVES = 3;
 const GRAIN_CONTRAST_SLOPE = 2.2;
 const GRAIN_CONTRAST_INTERCEPT = -0.22;
 const MOTION_FRAME_MS = 50;
+const MAX_PROGRAMMATIC_TRANSITION_SNAPSHOTS = 8;
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 const motionClockSubscribers = new Set<(time: number) => void>();
 let motionClockFrame: number | null = null;
 let motionClockLastTime = 0;
@@ -143,6 +145,7 @@ type GrainOverlayModel = {
   key: string;
   visible: boolean;
   opacity: number;
+  instant: boolean;
   rect: GrainOverlayRect;
   clipPoints: string;
   occlusionPoints: string[];
@@ -157,6 +160,26 @@ type ViewBox = {
 
 type MetalBackend = "blur" | "soft";
 
+type ProgrammaticLayerVisualState = {
+  layerId: string;
+  prefix: string;
+  index: number;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  geometrySignature: string;
+  offset: SquirclePoint;
+  offsetSignature: string;
+  theme: SquircleTheme;
+  variant: ResolvedVariant;
+  visible: boolean;
+  signature: string;
+};
+
+type ProgrammaticLayerSnapshot = ProgrammaticLayerVisualState & {
+  key: string;
+  exiting: boolean;
+  annotationsOnly: boolean;
+};
+
 export function SquircleScene({
   layers,
   geometry,
@@ -167,13 +190,15 @@ export function SquircleScene({
   ariaLabel = "Squircle scene",
   fitToLayers = true,
   transitionMs = 220,
+  transitionConfigChanges = true,
   onLayerClick
 }: SquircleSceneProps) {
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const prefix = idPrefix ?? `sq-${reactId}`;
   const geometryKey = JSON.stringify(geometry ?? {});
   const baseGeometry = useMemo(() => createSquircleGeometry(geometry), [geometryKey]);
-  const renderLayers = useMemo(() => layers.filter(layerCanRender), [layers]);
+  const renderLayers = layers;
+  const fittingLayers = renderLayers;
   const layerGeometryKey = JSON.stringify(renderLayers.map((layer) => ({
     id: layer.id,
     geometry: layer.geometry,
@@ -181,11 +206,11 @@ export function SquircleScene({
   })));
   const layerExtent = useMemo(() => Math.max(
     0,
-    ...renderLayers.map((layer) => {
+    ...fittingLayers.map((layer) => {
       const layerGeometry = createLayerGeometry(geometry, undefined, layer.geometry);
       return (layer.offset?.y ?? 0) + layerGeometry.sideBounds.maxY;
     })
-  ), [geometryKey, layerGeometryKey, renderLayers]);
+  ), [geometryKey, layerGeometryKey, fittingLayers]);
   const viewBoxHeight = geometry?.viewBoxHeight ?? (fitToLayers ? Math.max(baseGeometry.config.viewBoxHeight, layerExtent + 18) : baseGeometry.config.viewBoxHeight);
   const sceneGeometry = useMemo(() => (geometry?.viewBoxHeight === viewBoxHeight
     ? baseGeometry
@@ -245,11 +270,29 @@ export function SquircleScene({
   const metalBackend = useMemo(detectMetalBackend, []);
   const motionActive = motionEnabled && sceneInView;
   const frameRef = useRef<HTMLDivElement | null>(null);
+  const programmaticTransitions = useProgrammaticLayerTransitions({
+    layerModels,
+    hoverMap,
+    theme,
+    transitionMs,
+    enabled: transitionConfigChanges
+  });
+  const programmaticSnapshotsByLayerId = useMemo(() => groupProgrammaticSnapshotsByLayerId(programmaticTransitions.snapshots), [programmaticTransitions.snapshots]);
   const grainOverlays = useMemo(() => createGrainOverlays({
     layerModels,
     hoverMap,
+    programmaticSnapshots: programmaticTransitions.snapshots,
+    programmaticEnteringLayerIds: programmaticTransitions.enteringLayerIds,
+    programmaticInstantLayerIds: programmaticTransitions.instantLayerIds,
     sceneViewBox: sceneGeometry.viewBox
-  }), [layerModels, hoverMap, sceneGeometry.viewBox]);
+  }), [
+    layerModels,
+    hoverMap,
+    programmaticTransitions.enteringLayerIds,
+    programmaticTransitions.instantLayerIds,
+    programmaticTransitions.snapshots,
+    sceneGeometry.viewBox
+  ]);
   const hasGrainOverlay = grainOverlays.length > 0;
   const shouldUseGrainWrapper = hasGrainCandidate || hasGrainOverlay;
   const needsPointerTracking = controlledHoverTargetIds.size > 0;
@@ -407,6 +450,9 @@ export function SquircleScene({
           metalBackend={metalBackend}
           theme={theme}
           selected={selectedLayerId === layer.id}
+          entering={programmaticTransitions.enteringLayerIds.has(layer.id)}
+          instant={programmaticTransitions.instantLayerIds.has(layer.id)}
+          snapshots={programmaticSnapshotsByLayerId.get(layer.id) ?? []}
         />
       ))}
     </svg>
@@ -440,10 +486,6 @@ function safeIdPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-") || "layer";
 }
 
-function layerCanRender(layer: SquircleLayerConfig): boolean {
-  return layer.visible !== false || typeof layer.hover === "function";
-}
-
 function baseLayerVisible(layer: SquircleLayerConfig): boolean {
   return layer.visible !== false;
 }
@@ -454,6 +496,307 @@ function hoverLayerVisible(layer: SquircleLayerConfig, hover: RenderHoverConfig 
 
 function effectiveLayerVisible(layer: SquircleLayerConfig, hover: RenderHoverConfig | null): boolean {
   return hover?.enabled ? hoverLayerVisible(layer, hover) : baseLayerVisible(layer);
+}
+
+function useProgrammaticLayerTransitions({
+  layerModels,
+  hoverMap,
+  theme,
+  transitionMs,
+  enabled
+}: {
+  layerModels: LayerModel[];
+  hoverMap: Map<string, RenderHoverConfig | null>;
+  theme: SquircleTheme;
+  transitionMs: number;
+  enabled: boolean;
+}): {
+  snapshots: ProgrammaticLayerSnapshot[];
+  enteringLayerIds: Set<string>;
+  instantLayerIds: Set<string>;
+} {
+  const visualStates = useMemo(() => layerModels.map((model) => (
+    createProgrammaticVisualState(model, hoverMap.get(model.layer.id) ?? null, theme)
+  )), [layerModels, hoverMap, theme]);
+  const visualStateKey = useMemo(() => JSON.stringify(visualStates.map((state) => ({
+    layerId: state.layerId,
+    prefix: state.prefix,
+    geometry: state.geometrySignature,
+    offset: state.offsetSignature,
+    theme: state.theme,
+    signature: state.signature
+  }))), [visualStates]);
+  const programmaticStateKey = useMemo(() => createProgrammaticStateKey(layerModels, theme), [layerModels, theme]);
+  const previousStatesRef = useRef<Map<string, ProgrammaticLayerVisualState>>(new Map());
+  const previousProgrammaticStateKeyRef = useRef<string | null>(null);
+  const nextSnapshotIdRef = useRef(0);
+  const framesRef = useRef<number[]>([]);
+  const timersRef = useRef<number[]>([]);
+  const [snapshots, setSnapshots] = useState<ProgrammaticLayerSnapshot[]>([]);
+  const [enteringLayerIds, setEnteringLayerIds] = useState<Set<string>>(() => new Set());
+  const [instantLayerIds, setInstantLayerIds] = useState<Set<string>>(() => new Set());
+
+  useIsomorphicLayoutEffect(() => {
+    const previousStates = previousStatesRef.current;
+    const previousProgrammaticStateKey = previousProgrammaticStateKeyRef.current;
+    const nextStates = new Map(visualStates.map((state) => [state.layerId, state]));
+    const addedSnapshots: ProgrammaticLayerSnapshot[] = [];
+    const enteringIds = new Set<string>();
+    const instantIds = new Set<string>();
+    const programmaticStateChanged = previousProgrammaticStateKey !== null
+      && previousProgrammaticStateKey !== programmaticStateKey;
+    const shouldAnimate = Boolean(
+      enabled
+      && transitionMs > 0
+      && programmaticStateChanged
+    );
+
+    visualStates.forEach((state) => {
+      const previous = previousStates.get(state.layerId);
+      if (!previous || previous.signature === state.signature) return;
+      const canAnimate = shouldAnimate && canAnimateProgrammaticVisualState(previous, state);
+      if (!canAnimate) {
+        if (programmaticStateChanged) instantIds.add(state.layerId);
+        return;
+      }
+      const visibilityOnlyChange = isVisibilityOnlyProgrammaticChange(previous, state);
+
+      if (previous.visible && !visibilityOnlyChange) {
+        addedSnapshots.push({
+          ...previous,
+          key: `${previous.layerId}-program-${nextSnapshotIdRef.current++}`,
+          exiting: false,
+          annotationsOnly: surfaceSignature(previous.variant) === surfaceSignature(state.variant)
+        });
+      }
+      if (state.visible) enteringIds.add(state.layerId);
+      if (!state.visible && !visibilityOnlyChange) instantIds.add(state.layerId);
+    });
+
+    previousStatesRef.current = nextStates;
+    previousProgrammaticStateKeyRef.current = programmaticStateKey;
+
+    if (programmaticStateChanged) {
+      setSnapshots((current) => {
+        const pruned = current.filter((snapshot) => {
+          const next = nextStates.get(snapshot.layerId);
+          return next ? canAnimateProgrammaticVisualState(snapshot, next) : false;
+        });
+        return pruned.length === current.length ? current : pruned;
+      });
+      setEnteringLayerIds((current) => {
+        if (current.size === 0) return current;
+        const pruned = new Set([...current].filter((layerId) => nextStates.has(layerId)));
+        return pruned.size === current.size ? current : pruned;
+      });
+    }
+
+    if (!enabled || transitionMs <= 0) {
+      setSnapshots((current) => (current.length > 0 ? [] : current));
+      setEnteringLayerIds((current) => (current.size > 0 ? new Set() : current));
+    } else if (addedSnapshots.length > 0 || enteringIds.size > 0) {
+      if (addedSnapshots.length > 0) {
+        setSnapshots((current) => [
+          ...current,
+          ...addedSnapshots
+        ].slice(-MAX_PROGRAMMATIC_TRANSITION_SNAPSHOTS));
+      }
+      if (enteringIds.size > 0) {
+        setEnteringLayerIds((current) => {
+          const next = new Set(current);
+          enteringIds.forEach((layerId) => next.add(layerId));
+          return next;
+        });
+      }
+    }
+
+    if (instantIds.size > 0) {
+      setInstantLayerIds((current) => {
+        const next = new Set(current);
+        instantIds.forEach((layerId) => next.add(layerId));
+        return next;
+      });
+    }
+
+    const snapshotKeys = new Set(addedSnapshots.map((snapshot) => snapshot.key));
+    if (snapshotKeys.size === 0 && enteringIds.size === 0 && instantIds.size === 0) return undefined;
+
+    requestAfterNextPaint(framesRef, () => {
+      if (snapshotKeys.size > 0) {
+        setSnapshots((current) => current.map((snapshot) => (
+          snapshotKeys.has(snapshot.key) ? { ...snapshot, exiting: true } : snapshot
+        )));
+      }
+      if (enteringIds.size > 0) {
+        setEnteringLayerIds((current) => {
+          if (current.size === 0) return current;
+          const next = new Set(current);
+          enteringIds.forEach((layerId) => next.delete(layerId));
+          return next;
+        });
+      }
+      if (instantIds.size > 0) {
+        setInstantLayerIds((current) => {
+          if (current.size === 0) return current;
+          const next = new Set(current);
+          instantIds.forEach((layerId) => next.delete(layerId));
+          return next;
+        });
+      }
+    });
+
+    if (snapshotKeys.size > 0) {
+      const timer = window.setTimeout(() => {
+        timersRef.current = timersRef.current.filter((candidate) => candidate !== timer);
+        setSnapshots((current) => current.filter((snapshot) => !snapshotKeys.has(snapshot.key)));
+      }, transitionMs);
+      timersRef.current.push(timer);
+    }
+
+    return undefined;
+  }, [enabled, programmaticStateKey, transitionMs, visualStateKey]);
+
+  useEffect(() => () => {
+    framesRef.current.forEach((frame) => window.cancelAnimationFrame(frame));
+    timersRef.current.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
+  return { snapshots, enteringLayerIds, instantLayerIds };
+}
+
+function requestAfterNextPaint(
+  framesRef: MutableRefObject<number[]>,
+  callback: () => void
+): number {
+  const firstFrame = window.requestAnimationFrame(() => {
+    framesRef.current = framesRef.current.filter((candidate) => candidate !== firstFrame);
+    const secondFrame = window.requestAnimationFrame(() => {
+      framesRef.current = framesRef.current.filter((candidate) => candidate !== secondFrame);
+      callback();
+    });
+    framesRef.current.push(secondFrame);
+  });
+  framesRef.current.push(firstFrame);
+  return firstFrame;
+}
+
+function createProgrammaticStateKey(
+  layerModels: LayerModel[],
+  theme: SquircleTheme
+): string {
+  return JSON.stringify(layerModels.map(({ layer, prefix, geometry }) => {
+    const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
+    const hover = layer.hover && typeof layer.hover !== "function"
+      ? splitHoverState(layer.hover)
+      : null;
+    const hoverSignature = hover
+      ? {
+          visible: hover.visible,
+          variant: variantSignature(resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity))
+        }
+      : typeof layer.hover === "function" ? "resolver" : null;
+
+    return {
+      layerId: layer.id,
+      prefix,
+      geometry: geometrySignatureFor(geometry),
+      offset: `${offset.x},${offset.y}`,
+      theme,
+      visible: baseLayerVisible(layer),
+      base: variantSignature(resolveVariant(layer.base, layer.stroke, layer.opacity)),
+      hover: hoverSignature
+    };
+  }));
+}
+
+function createProgrammaticVisualState(
+  { layer, index, prefix, geometry }: LayerModel,
+  hover: RenderHoverConfig | null,
+  theme: SquircleTheme
+): ProgrammaticLayerVisualState {
+  const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+  const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
+  const hasVariantHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+  const baseVisible = baseLayerVisible(layer);
+  const hoverVisible = hoverLayerVisible(layer, hover);
+  const hasVisibilityHover = hover?.visible !== undefined && hoverVisible !== baseVisible;
+  const hoverEnabled = Boolean((hasVariantHover || hasVisibilityHover) && hover?.enabled);
+  const variant = hoverEnabled && hasVariantHover && hoverVariant ? hoverVariant : base;
+  const visible = hoverEnabled ? hoverVisible : baseVisible;
+  const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
+
+  return {
+    layerId: layer.id,
+    prefix,
+    index,
+    geometry,
+    geometrySignature: geometrySignatureFor(geometry),
+    offset,
+    offsetSignature: `${offset.x},${offset.y}`,
+    theme,
+    variant,
+    visible,
+    signature: `${variantSignature(variant)}|visible:${visible ? 1 : 0}`
+  };
+}
+
+function canTransitionProgrammaticState(
+  previous: ProgrammaticLayerVisualState,
+  current: ProgrammaticLayerVisualState
+): boolean {
+  return previous.layerId === current.layerId
+    && previous.prefix === current.prefix
+    && previous.geometrySignature === current.geometrySignature
+    && previous.offsetSignature === current.offsetSignature
+    && previous.theme === current.theme;
+}
+
+function canAnimateProgrammaticVisualState(
+  previous: ProgrammaticLayerVisualState,
+  current: ProgrammaticLayerVisualState
+): boolean {
+  if (!canTransitionProgrammaticState(previous, current)) return false;
+  if (surfaceSignature(previous.variant) === surfaceSignature(current.variant)) return true;
+  if (surfaceTransitionShouldSnap(previous.variant, current.variant)) return false;
+
+  const hasComplexSurface = variantHasComplexSurface(previous.variant)
+    || variantHasComplexSurface(current.variant);
+  return !hasComplexSurface;
+}
+
+function isVisibilityOnlyProgrammaticChange(
+  previous: ProgrammaticLayerVisualState,
+  current: ProgrammaticLayerVisualState
+): boolean {
+  return variantSignature(previous.variant) === variantSignature(current.variant)
+    && previous.visible !== current.visible;
+}
+
+function geometrySignatureFor(geometry: ReturnType<typeof createSquircleGeometry>): string {
+  const config = geometry.config;
+  return [
+    geometry.viewBox,
+    config.width,
+    config.viewBoxHeight,
+    config.exponent,
+    config.samples,
+    config.halfSize,
+    config.prismHeight,
+    config.angleDegrees,
+    config.inlayScale,
+    config.center.x,
+    config.center.y
+  ].join("|");
+}
+
+function groupProgrammaticSnapshotsByLayerId(
+  snapshots: ProgrammaticLayerSnapshot[]
+): Map<string, ProgrammaticLayerSnapshot[]> {
+  const grouped = new Map<string, ProgrammaticLayerSnapshot[]>();
+  snapshots.forEach((snapshot) => {
+    grouped.set(snapshot.layerId, [...(grouped.get(snapshot.layerId) ?? []), snapshot]);
+  });
+  return grouped;
 }
 
 function SquircleDefinitions({
@@ -596,7 +939,10 @@ function SquircleLayer({
   motionEnabled,
   metalBackend,
   theme,
-  selected
+  selected,
+  entering,
+  instant,
+  snapshots
 }: {
   layer: SquircleLayerConfig;
   hover: RenderHoverConfig | null;
@@ -606,6 +952,9 @@ function SquircleLayer({
   metalBackend: MetalBackend;
   theme: SquircleTheme;
   selected: boolean;
+  entering: boolean;
+  instant: boolean;
+  snapshots: ProgrammaticLayerSnapshot[];
 }) {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
@@ -614,20 +963,41 @@ function SquircleLayer({
   const hoverVisible = hoverLayerVisible(layer, hover);
   const hasVisibilityHover = hover?.visible !== undefined && hoverVisible !== baseVisible;
   const hasHover = hasVariantHover || hasVisibilityHover;
-  const cssHover = Boolean(hasVariantHover && hover?.mode === "css");
+  const stableSurfaceHover = Boolean(hasVariantHover && hoverVariant && surfaceSignature(base) === surfaceSignature(hoverVariant));
+  const cssHover = Boolean(hasVariantHover && hover?.mode === "css" && baseVisible);
   const controlledHoverEnabled = Boolean(hasHover && hover?.mode === "controlled" && hover.enabled);
   const layerVisible = controlledHoverEnabled ? hoverVisible : baseVisible;
+  const canActivateHiddenHover = Boolean(!baseVisible && hover?.visible === true);
+  const layerInteractive = baseVisible || layerVisible || canActivateHiddenHover;
   const x = layer.offset?.x ?? 0;
   const y = layer.offset?.y ?? 0;
   const layerStyle = {
-    opacity: layerVisible ? 1 : 0,
-    pointerEvents: baseVisible || layerVisible ? undefined : "none"
+    pointerEvents: layerInteractive ? undefined : "none"
   } as CSSProperties;
+  const currentStateClassName = [
+    entering && layerVisible ? "sq-programmatic-entering" : "",
+    layerVisible ? "" : "sq-programmatic-hidden",
+    instant ? "sq-programmatic-instant" : ""
+  ].filter(Boolean).join(" ");
+  const hasAnnotationSnapshot = snapshots.some((snapshot) => snapshot.annotationsOnly);
+  const surfaceStateClassName = [
+    layerVisible ? "" : "sq-programmatic-hidden",
+    instant ? "sq-programmatic-instant" : ""
+  ].filter(Boolean).join(" ");
+  const currentSurfaceClassName = hasAnnotationSnapshot ? surfaceStateClassName : currentStateClassName;
+  const baseSurfaceClassName = [
+    stableSurfaceHover ? "sq-surface" : "sq-base sq-surface",
+    currentSurfaceClassName
+  ].filter(Boolean).join(" ");
+  const baseAnnotationClassName = ["sq-base", currentStateClassName].filter(Boolean).join(" ");
+  const hoverClassName = ["sq-hover", currentStateClassName].filter(Boolean).join(" ");
+  const hoverSurfaceClassName = ["sq-hover", currentSurfaceClassName].filter(Boolean).join(" ");
 
   return (
     <g
       className={[
         "sq-layer",
+        layerInteractive ? "" : "sq-layer-inert",
         cssHover ? "sq-has-hover" : "",
         controlledHoverEnabled ? "sq-hover-enabled" : "",
         selected ? "is-selected" : "",
@@ -640,8 +1010,52 @@ function SquircleLayer({
       transform={`translate(${x} ${y})`}
       style={layerStyle}
     >
-      <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} />
-      {hasVariantHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} /> : null}
+      {stableSurfaceHover && hoverVariant ? (
+        <>
+          <SquircleVariant className={baseSurfaceClassName} variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} annotations={false} />
+          <SquircleAnnotations className={baseAnnotationClassName} variant={base} geometry={geometry} prefix={prefix} theme={theme} />
+          <SquircleAnnotations className={hoverClassName} variant={hoverVariant} geometry={geometry} prefix={prefix} theme={theme} />
+        </>
+      ) : hasAnnotationSnapshot ? (
+        <>
+          <SquircleVariant className={baseSurfaceClassName} variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} annotations={false} />
+          <SquircleAnnotations className={baseAnnotationClassName} variant={base} geometry={geometry} prefix={prefix} theme={theme} />
+          {hasVariantHover && hoverVariant ? <SquircleVariant className={hoverSurfaceClassName} variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} /> : null}
+        </>
+      ) : (
+        <>
+          <SquircleVariant className={["sq-base", currentSurfaceClassName].filter(Boolean).join(" ")} variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} />
+          {hasVariantHover && hoverVariant ? <SquircleVariant className={hoverSurfaceClassName} variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} /> : null}
+        </>
+      )}
+      {snapshots.map((snapshot) => {
+        const snapshotClassName = [
+          "sq-programmatic-snapshot",
+          snapshot.exiting ? "sq-programmatic-exiting" : ""
+        ].filter(Boolean).join(" ");
+
+        return snapshot.annotationsOnly ? (
+          <SquircleAnnotations
+            key={snapshot.key}
+            className={snapshotClassName}
+            variant={snapshot.variant}
+            geometry={snapshot.geometry}
+            prefix={snapshot.prefix}
+            theme={snapshot.theme}
+          />
+        ) : (
+          <SquircleVariant
+            key={snapshot.key}
+            className={snapshotClassName}
+            variant={snapshot.variant}
+            geometry={snapshot.geometry}
+            prefix={snapshot.prefix}
+            motionEnabled={false}
+            metalBackend={metalBackend}
+            theme={snapshot.theme}
+          />
+        );
+      })}
     </g>
   );
 }
@@ -748,7 +1162,8 @@ function SquircleVariant({
   prefix,
   motionEnabled,
   metalBackend,
-  theme
+  theme,
+  annotations = true
 }: {
   className: string;
   variant: ResolvedVariant;
@@ -757,17 +1172,15 @@ function SquircleVariant({
   motionEnabled: boolean;
   metalBackend: MetalBackend;
   theme: SquircleTheme;
+  annotations?: boolean;
 }) {
   const palette = getRenderPalette(variant.paletteId, theme);
   const topFill = `url(#${prefix}-top-${palette.id})`;
   const sideFill = `url(#${prefix}-side-${palette.id})`;
   const wireFill = `url(#${prefix}-wire-${palette.id})`;
-  const textSurfaceFill = `url(#${prefix}-text-surface-${palette.id})`;
-  const textWireFill = `url(#${prefix}-text-wire-${palette.id})`;
   const wallPoints = pointsToString(geometry.wallPoints);
   const topPoints = pointsToString(geometry.topPoints);
   const hiddenPoints = pointsToString(geometry.hiddenPoints);
-  const inlayPoints = pointsToString(geometry.inlayPoints);
   const topClipId = `${prefix}-top-clip`;
   const glass = variant.material === "glass";
 
@@ -833,6 +1246,54 @@ function SquircleVariant({
           />
         </>
       )}
+      {annotations ? <SquircleAnnotationElements variant={variant} palette={palette} geometry={geometry} prefix={prefix} theme={theme} /> : null}
+    </g>
+  );
+}
+
+function SquircleAnnotations({
+  className,
+  variant,
+  geometry,
+  prefix,
+  theme
+}: {
+  className: string;
+  variant: ResolvedVariant;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  prefix: string;
+  theme: SquircleTheme;
+}) {
+  const palette = getRenderPalette(variant.paletteId, theme);
+  const glass = variant.material === "glass";
+
+  return (
+    <g className={["sq-variant sq-annotations", className, `sq-material-${variant.material}`, glass ? "sq-material-transparent" : ""].filter(Boolean).join(" ")}>
+      <SquircleAnnotationElements variant={variant} palette={palette} geometry={geometry} prefix={prefix} theme={theme} />
+    </g>
+  );
+}
+
+function SquircleAnnotationElements({
+  variant,
+  palette,
+  geometry,
+  prefix,
+  theme
+}: {
+  variant: ResolvedVariant;
+  palette: RenderPalette;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  prefix: string;
+  theme: SquircleTheme;
+}) {
+  const wireFill = `url(#${prefix}-wire-${palette.id})`;
+  const textSurfaceFill = `url(#${prefix}-text-surface-${palette.id})`;
+  const textWireFill = `url(#${prefix}-text-wire-${palette.id})`;
+  const inlayPoints = pointsToString(geometry.inlayPoints);
+
+  return (
+    <>
       {variant.line ? (
         <polygon
           className="sq-line"
@@ -858,7 +1319,7 @@ function SquircleVariant({
           {variant.text}
         </text>
       ) : null}
-    </g>
+    </>
   );
 }
 
@@ -1397,6 +1858,35 @@ function variantSignature(variant: ResolvedVariant): string {
   return JSON.stringify(variant);
 }
 
+function surfaceSignature(variant: ResolvedVariant): string {
+  return JSON.stringify({
+    material: variant.material,
+    paletteId: variant.paletteId,
+    effect: variant.effect,
+    grain: variant.grain,
+    stroke: {
+      face: variant.stroke.face,
+      faceOpacity: variant.stroke.faceOpacity,
+      wire: variant.stroke.wire,
+      wireOpacity: variant.stroke.wireOpacity,
+      hidden: variant.stroke.hidden,
+      hiddenOpacity: variant.stroke.hiddenOpacity
+    },
+    opacity: {
+      transparentFace: variant.opacity.transparentFace
+    }
+  });
+}
+
+function variantHasComplexSurface(variant: ResolvedVariant): boolean {
+  return variant.material !== "wireframe" && (variant.effect !== "off" || variant.grain);
+}
+
+function surfaceTransitionShouldSnap(previous: ResolvedVariant, current: ResolvedVariant): boolean {
+  return surfaceSignature(previous) !== surfaceSignature(current)
+    && (variantHasComplexSurface(previous) || variantHasComplexSurface(current));
+}
+
 function useMotionFrame(enabled: boolean, callback: (time: number) => void) {
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
@@ -1604,28 +2094,43 @@ function detectMetalBackend(): MetalBackend {
 function createGrainOverlays({
   layerModels,
   hoverMap,
+  programmaticSnapshots,
+  programmaticEnteringLayerIds,
+  programmaticInstantLayerIds,
   sceneViewBox
 }: {
   layerModels: LayerModel[];
   hoverMap: Map<string, RenderHoverConfig | null>;
+  programmaticSnapshots: ProgrammaticLayerSnapshot[];
+  programmaticEnteringLayerIds: Set<string>;
+  programmaticInstantLayerIds: Set<string>;
   sceneViewBox: string;
 }): GrainOverlayModel[] {
   const viewBox = parseViewBox(sceneViewBox);
   const overlays: GrainOverlayModel[] = [];
+
+  const annotationSnapshotLayerIds = new Set(
+    programmaticSnapshots
+      .filter((snapshot) => snapshot.annotationsOnly)
+      .map((snapshot) => snapshot.layerId)
+  );
 
   layerModels.forEach(({ layer, prefix, geometry }, layerIndex) => {
     const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
     const hover = hoverMap.get(layer.id) ?? null;
     const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
     const hasVariantHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+    const hasSurfaceHover = Boolean(hoverVariant && surfaceSignature(hoverVariant) !== surfaceSignature(base));
     const baseVisible = baseLayerVisible(layer);
     const hoverVisible = hoverLayerVisible(layer, hover);
     const hasVisibilityHover = hover?.visible !== undefined && hoverVisible !== baseVisible;
     const hoverEnabled = Boolean((hasVariantHover || hasVisibilityHover) && hover?.enabled);
+    const instantProgrammatic = programmaticInstantLayerIds.has(layer.id);
     const baseOpacity = hoverEnabled
-      ? (hasVariantHover ? 0 : visibilityOpacity(hoverVisible))
+      ? (hasSurfaceHover ? 0 : visibilityOpacity(hoverVisible))
       : visibilityOpacity(baseVisible);
-    const hoverOpacity = hoverEnabled ? visibilityOpacity(hoverVisible) : 0;
+    const hoverOpacity = hoverEnabled && hasSurfaceHover ? visibilityOpacity(hoverVisible) : 0;
+    const currentOpacity = programmaticEnteringLayerIds.has(layer.id) && !annotationSnapshotLayerIds.has(layer.id) ? 0 : 1;
     const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
     const occlusionPolygons = createHigherLayerOcclusionPolygons(layerModels, layerIndex, hoverMap);
 
@@ -1636,7 +2141,8 @@ function createGrainOverlays({
         offset,
         occlusionPolygons,
         viewBox,
-        opacity: grainOverlayOpacity(base) * baseOpacity
+        opacity: grainOverlayOpacity(base) * baseOpacity * currentOpacity,
+        instant: instantProgrammatic
       }));
     }
 
@@ -1647,9 +2153,26 @@ function createGrainOverlays({
         offset,
         occlusionPolygons,
         viewBox,
-        opacity: grainOverlayOpacity(hoverVariant) * hoverOpacity
+        opacity: grainOverlayOpacity(hoverVariant) * hoverOpacity * currentOpacity,
+        instant: instantProgrammatic
       }));
     }
+  });
+
+  programmaticSnapshots.forEach((snapshot) => {
+    if (snapshot.annotationsOnly) return;
+    if (!variantHasGrainSurface(snapshot.variant)) return;
+
+    const occlusionPolygons = createHigherLayerOcclusionPolygons(layerModels, snapshot.index, hoverMap);
+    overlays.push(createGrainOverlay({
+      key: `${snapshot.key}-grain`,
+      geometry: snapshot.geometry,
+      offset: snapshot.offset,
+      occlusionPolygons,
+      viewBox,
+      opacity: grainOverlayOpacity(snapshot.variant) * (snapshot.exiting ? 0 : visibilityOpacity(snapshot.visible)),
+      instant: false
+    }));
   });
 
   return overlays;
@@ -1665,7 +2188,8 @@ function createGrainOverlay({
   offset,
   occlusionPolygons,
   viewBox,
-  opacity
+  opacity,
+  instant
 }: {
   key: string;
   geometry: ReturnType<typeof createSquircleGeometry>;
@@ -1673,6 +2197,7 @@ function createGrainOverlay({
   occlusionPolygons: SquirclePoint[][];
   viewBox: ViewBox;
   opacity: number;
+  instant: boolean;
 }): GrainOverlayModel {
   const points = geometry.topPoints.map((point) => ({
     x: point.x + offset.x,
@@ -1684,6 +2209,7 @@ function createGrainOverlay({
     key,
     visible: bounds.maxX > bounds.minX && bounds.maxY > bounds.minY,
     opacity,
+    instant,
     rect: createGrainOverlayRect(bounds, viewBox),
     clipPoints: createGrainClipPoints(points, bounds),
     occlusionPoints: createGrainOcclusionClipPoints(occlusionPolygons, bounds)
@@ -1916,6 +2442,7 @@ function GrainOverlay({ prefix, overlays }: { prefix: string; overlays: GrainOve
           preserveAspectRatio="none"
         >
           <rect
+            className={overlay.instant ? "sq-grain-instant" : undefined}
             x="0"
             y="0"
             width="100%"

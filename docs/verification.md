@@ -43,6 +43,12 @@ Expected results:
 - Radius, height, and line-size edits affect only the selected layer and serialize into that layer's `geometry` object.
 - Reloading `/constructor.html` restores layers, scene camera, theme, selection, and Code drawer state from localStorage.
 - No hover state changes layer gaps, transforms, scale, shadows, filters, or halos.
+- A layer with `visible: false` stays fully hidden and does not block lower-layer hover on variant-only hover; it may fade in and act as a hover target only when hover explicitly sets `visible: true`.
+- Hover states that only change text or line keep the underlying solid, glass, wireframe, metal, mesh, and grain surface stable; only the annotations crossfade.
+- Hover states crossfade smoothly regardless of material, palette, effect, grain, text, or line changes.
+- Programmatic changes to simple visual layer state, such as text, line, palette, material, annotation style, and visibility on non-effect surfaces, crossfade with `transitionMs`; same-surface text/line changes and visibility-only changes also crossfade on `metal`, `mesh`, and `grain` layers; actual surface-recipe swaps involving `metal`, `mesh`, or `grain` update instantly to avoid blink-prone duplicate effect layers.
+- Visibility toggles still crossfade on `metal`, `mesh`, and `grain` layers that also define hover configs.
+- Geometry, camera, offset, theme, and layer-order changes update structurally instead of morphing.
 - Function-valued `layer.hover` handles standard sibling hover without page-level layer rewriting.
 - Layer event callbacks fire from the layer group and can still drive external UI state for custom interactions.
 - Wireframe text uses one live SVG `<text>` element with gradient stroke, not duplicated label copies or primitive letter parts.

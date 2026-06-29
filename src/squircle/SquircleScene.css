@@ -33,11 +33,20 @@
 
 .sq-layer {
   cursor: pointer;
-  transition: opacity var(--sq-transition-ms, 220ms) ease;
+}
+
+.sq-layer.sq-layer-inert,
+.sq-layer.sq-layer-inert * {
+  cursor: default;
+  pointer-events: none;
 }
 
 .sq-layer.is-selected {
   outline: none;
+}
+
+.sq-programmatic-snapshot {
+  pointer-events: none;
 }
 
 .sq-variant {
@@ -57,6 +66,24 @@
 .sq-layer.sq-has-hover:hover > .sq-hover,
 .sq-layer.sq-hover-enabled > .sq-hover {
   opacity: 1;
+}
+
+.sq-layer > .sq-variant.sq-programmatic-instant {
+  transition: none;
+}
+
+.sq-layer > .sq-variant.sq-programmatic-entering {
+  opacity: 0;
+  transition: none;
+}
+
+.sq-layer > .sq-variant.sq-programmatic-hidden,
+.sq-layer > .sq-variant.sq-programmatic-exiting {
+  opacity: 0;
+}
+
+.sq-layer > .sq-variant.sq-programmatic-snapshot:not(.sq-programmatic-exiting) {
+  transition: none;
 }
 
 .sq-face {
@@ -111,4 +138,8 @@
 
 .sq-grain-overlay rect {
   transition: opacity var(--sq-transition-ms, 220ms) ease;
+}
+
+.sq-grain-overlay rect.sq-grain-instant {
+  transition: none;
 }

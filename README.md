@@ -126,8 +126,9 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | `idPrefix` | `string` | generated React id | Prefix for SVG gradient ids. Use when deterministic ids are required. |
 | `className` | `string` | none | Extra class on the root SVG. |
 | `ariaLabel` | `string` | `Squircle scene` | Accessible label for the SVG. |
-| `fitToLayers` | `boolean` | `true` | Expands the viewBox height to include rendered layer offsets, including layers that can become visible through a hover resolver. |
-| `transitionMs` | `number` | `220` | Hover crossfade duration in milliseconds. |
+| `fitToLayers` | `boolean` | `true` | Expands the viewBox height to include every mounted layer offset, including layers hidden at opacity `0`. |
+| `transitionMs` | `number` | `220` | Hover and programmatic visual-state crossfade duration in milliseconds. |
+| `transitionConfigChanges` | `boolean` | `true` | Crossfade programmatic layer visual-state changes by briefly keeping outgoing snapshots mounted. |
 | `onLayerClick` | `(event: SquircleLayerClickEvent) => void` | none | Called on layer click with `{ layerId, layer, index, layerElement, event }`. |
 
 ### `SquircleLayerConfig`
@@ -135,7 +136,7 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | `string` | required | Stable layer id. |
-| `visible` | `boolean` | `true` | Hidden layers are skipped unless they define a hover resolver. Hover can override visibility with an animated fade. |
+| `visible` | `boolean` | `true` | Hidden layers render non-interactively at opacity `0` so visibility changes can fade. Remove a layer from the array to drop it structurally. |
 | `offset` | `{ x?: number; y?: number }` | `{ x: 0, y: 0 }` | SVG translation for this layer. |
 | `geometry` | `SquircleLayerGeometryConfig` | scene geometry | Per-layer radius, prism height, and line-inlay scale. |
 | `base` | `SquircleVariantConfig` | required | Normal layer state. |
@@ -167,7 +168,11 @@ Each layer has a required `base` variant plus an optional `hover` state. `hover`
 
 `SquircleLayerHoverState` supports every `SquircleVariantConfig` field plus `visible?: boolean`. Use `visible` only in `hover`, not in `base`, when a hover interaction should fade a layer in or out.
 
+Hover transitions always crossfade with `transitionMs`, including changes to material, palette, effect, grain, text, and line. If hover only changes text or line on the same surface, the renderer keeps the underlying surface stable and crossfades only the annotations.
+
 `auto` is material-aware annotation paint. On solid material it resolves to the palette `labelFill`; on glass material it chooses black or white by contrast against the translucent top face over the current theme stage; on wireframe material, text and line paint are driven by the wire gradients.
+
+Programmatic config transitions use the same opacity-crossfade model as hover for simple visual changes: the renderer keeps a bounded number of outgoing visual snapshots mounted for `transitionMs`, while the new state fades in. This is intended for text, line, palette, material, annotation style, and visibility changes on non-effect surfaces. Same-surface text/line changes and visibility-only changes also fade on `metal`, `mesh`, and `grain` layers because no duplicate effect surface is needed. Actual surface-recipe swaps involving `metal`, `mesh`, or `grain` update instantly to avoid duplicate animated/filter layers and visual blinking. Geometry, camera, offset, theme, and layer-order changes are not morphed; they update structurally.
 
 ### `SquircleLayerGeometryConfig`
 
