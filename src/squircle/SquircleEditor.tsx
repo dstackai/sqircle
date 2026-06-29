@@ -5,7 +5,8 @@ import { DEFAULT_GEOMETRY, reflowLayerOffsets } from "./geometry";
 import {
   DEFAULT_PALETTE_ID,
   SQUIRCLE_PALETTE_IDS,
-  SQUIRCLE_PALETTES
+  SQUIRCLE_PALETTES,
+  getSquirclePaletteSwatch
 } from "./palettes";
 import { SquircleScene } from "./SquircleScene";
 import type {
@@ -49,7 +50,7 @@ type EditorLineOption = SquircleLineStyle | "off";
 const MATERIAL_OPTIONS = [
   { value: "wireframe", label: "Wire", title: "Gradient outline with transparent faces" },
   { value: "solid", label: "Solid", title: "Filled prism with top and side gradients" },
-  { value: "transparent", label: "Transparent", title: "Translucent filled prism" }
+  { value: "glass", label: "Glass", title: "Glass-like prism with translucent faces and back guides" }
 ] satisfies { value: SquircleMaterial; label: string; title: string }[];
 const EFFECT_OPTIONS = [
   { value: "off", label: "Off", title: "Use the static top-face gradient" },
@@ -366,7 +367,8 @@ export function SquircleEditor({
               const arrayIndex = layers.length - reverseIndex - 1;
               const index = layers.length - reverseIndex;
               const palette = getPalette(layer.base.paletteId);
-              const material = layer.base.material ?? "wireframe";
+              const swatch = getSquirclePaletteSwatch(layer.base.paletteId, activeTheme);
+              const material = materialForEditor(layer.base.material);
               const effect = materialSupportsEffect(material) ? variantEffect(layer.base) : "off";
               return (
                 <article className={layer.id === selectedId ? "squircle-editor-layer-row is-active" : "squircle-editor-layer-row"} key={layer.id}>
@@ -385,7 +387,7 @@ export function SquircleEditor({
                       <span className="layer-palette-chip">
                         <span
                           className="palette-swatch"
-                          style={{ background: `linear-gradient(135deg, ${palette.swatch[0]}, ${palette.swatch[1]})` }}
+                          style={{ background: `linear-gradient(135deg, ${swatch[0]}, ${swatch[1]})` }}
                         />
                         {palette.label}
                       </span>
@@ -579,6 +581,7 @@ export function SquircleEditor({
                 <VariantEditor
                   title="Base State"
                   variant={selectedLayer.base}
+                  theme={activeTheme}
                   onChange={updateBase}
                 />
               ) : (
@@ -602,6 +605,7 @@ export function SquircleEditor({
                   {selectedHover ? (
                     <VariantControls
                       variant={{ ...selectedLayer.base, ...(selectedHover ?? {}) }}
+                      theme={activeTheme}
                       onChange={updateHover}
                     />
                   ) : null}
@@ -693,27 +697,31 @@ function EditorSection({
 function VariantEditor({
   title,
   variant,
+  theme,
   onChange
 }: {
   title: string;
   variant: SquircleVariantConfig;
+  theme: SquircleTheme;
   onChange: (patch: SquircleVariantConfig) => void;
 }) {
   return (
     <EditorSection title={title}>
-      <VariantControls variant={variant} onChange={onChange} />
+      <VariantControls variant={variant} theme={theme} onChange={onChange} />
     </EditorSection>
   );
 }
 
 function VariantControls({
   variant,
+  theme,
   onChange
 }: {
   variant: SquircleVariantConfig;
+  theme: SquircleTheme;
   onChange: (patch: SquircleVariantConfig) => void;
 }) {
-  const material = variant.material ?? "wireframe";
+  const material = materialForEditor(variant.material);
 
   return (
     <div className="variant-controls">
@@ -725,6 +733,7 @@ function VariantControls({
       />
       <PaletteField
         value={paletteIdForEditor(variant.paletteId)}
+        theme={theme}
         onChange={(paletteId) => onChange({ paletteId })}
       />
       {materialSupportsEffect(material) ? (
@@ -743,7 +752,7 @@ function VariantControls({
           disabled={!materialSupportsEffect(material)}
           title={materialSupportsEffect(material)
             ? "Add subtle multiply-blended surface grain clipped to the top face."
-            : "Grain applies to Solid and Transparent materials."}
+            : "Grain applies to Solid and Glass materials."}
           onChange={(grain) => onChange({ grain })}
         />
         <FeatureSwitch
@@ -909,13 +918,14 @@ function SegmentedField<T extends string>({
   );
 }
 
-function PaletteField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function PaletteField({ value, theme, onChange }: { value: string; theme: SquircleTheme; onChange: (value: string) => void }) {
   return (
     <div className="field palette-field">
       <span>Palette</span>
       <div className="palette-grid" role="group" aria-label="Palette">
         {SQUIRCLE_PALETTE_IDS.map((id) => {
           const palette = getPalette(id);
+          const swatch = getSquirclePaletteSwatch(id, theme);
 
           return (
             <button
@@ -928,7 +938,7 @@ function PaletteField({ value, onChange }: { value: string; onChange: (value: st
               <span
                 className="palette-swatch"
                 style={{
-                  background: `linear-gradient(135deg, ${palette.swatch[0]}, ${palette.swatch[1]})`
+                  background: `linear-gradient(135deg, ${swatch[0]}, ${swatch[1]})`
                 }}
               />
               <span>{id}</span>
@@ -1080,13 +1090,19 @@ function variantEffect(variant: SquircleVariantConfig): SquircleEffect {
 }
 
 function materialLabel(material: SquircleMaterial): string {
-  if (material === "transparent") return "Transparent";
+  if (material === "glass" || material === "transparent") return "Glass";
   if (material === "solid") return "Solid";
   return "Wire";
 }
 
 function materialSupportsEffect(material: SquircleMaterial): boolean {
   return material !== "wireframe";
+}
+
+function materialForEditor(material: SquircleMaterial | undefined): SquircleMaterial {
+  if (material === "solid" || material === "wireframe") return material;
+  if (material === "glass" || material === "transparent") return "glass";
+  return "wireframe";
 }
 
 function layerLabel(_id: string, index: number, _total: number): string {
@@ -1217,10 +1233,10 @@ function variantLineColor(variant: SquircleVariantConfig): EditorAnnotationColor
 }
 
 function forcedTextColor(variant: SquircleVariantConfig): string | null {
-  if ((variant.material ?? "wireframe") !== "wireframe") return null;
+  if (materialForEditor(variant.material) !== "wireframe") return null;
   return variantTextStyle(variant) === "wireframe" ? "Wire gradient" : "Surface gradient";
 }
 
 function forcedLineColor(variant: SquircleVariantConfig): string | null {
-  return (variant.material ?? "wireframe") === "wireframe" ? "Wire gradient" : null;
+  return materialForEditor(variant.material) === "wireframe" ? "Wire gradient" : null;
 }

@@ -107,7 +107,7 @@ const layers = [
 ];
 ```
 
-The resolver runs for each visible layer. Its return value is shallow-merged over that layer's `base`, so include only the fields you want to change. In the example above, sibling layers keep their palette, text, line, geometry, and stroke settings; only `material` is temporarily enforced as `wireframe`. Return `false`, `null`, or `undefined` to leave a layer unchanged.
+The resolver runs for each rendered layer. Its return value is shallow-merged over that layer's `base`, so include only the fields you want to change. In the example above, sibling layers keep their palette, text, line, geometry, and stroke settings; only `material` is temporarily enforced as `wireframe`. Hover state may also include `visible: false` or `visible: true`; visibility fades with `transitionMs` and can be combined with material/color changes. Return `false`, `null`, or `undefined` to leave a layer unchanged.
 
 For the full renderer API, layer model, geometry, strokes, opacity, and palette fields, read [React Component Guide](docs/react/README.md).
 
@@ -126,7 +126,7 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | `idPrefix` | `string` | generated React id | Prefix for SVG gradient ids. Use when deterministic ids are required. |
 | `className` | `string` | none | Extra class on the root SVG. |
 | `ariaLabel` | `string` | `Squircle scene` | Accessible label for the SVG. |
-| `fitToLayers` | `boolean` | `true` | Expands the viewBox height to include visible layer offsets. |
+| `fitToLayers` | `boolean` | `true` | Expands the viewBox height to include rendered layer offsets, including layers that can become visible through a hover resolver. |
 | `transitionMs` | `number` | `220` | Hover crossfade duration in milliseconds. |
 | `onLayerClick` | `(event: SquircleLayerClickEvent) => void` | none | Called on layer click with `{ layerId, layer, index, layerElement, event }`. |
 
@@ -135,37 +135,39 @@ This is the package-level renderer API reference. Keep it synchronized with `doc
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `id` | `string` | required | Stable layer id. |
-| `visible` | `boolean` | `true` | Hidden layers are skipped without changing other offsets. |
+| `visible` | `boolean` | `true` | Hidden layers are skipped unless they define a hover resolver. Hover can override visibility with an animated fade. |
 | `offset` | `{ x?: number; y?: number }` | `{ x: 0, y: 0 }` | SVG translation for this layer. |
 | `geometry` | `SquircleLayerGeometryConfig` | scene geometry | Per-layer radius, prism height, and line-inlay scale. |
 | `base` | `SquircleVariantConfig` | required | Normal layer state. |
-| `hover` | `SquircleVariantConfig \| SquircleLayerHoverResolver` | none | Hover state. Use an object for this layer's own hover; use a function to calculate hover state for each layer based on the currently hovered layer. Hover objects and resolver returns are shallow-merged over `base`, so omitted fields stay unchanged. |
+| `hover` | `SquircleLayerHoverState \| SquircleLayerHoverResolver` | none | Hover state. Use an object for this layer's own hover; use a function to calculate hover state for each layer based on the currently hovered layer. Hover objects and resolver returns are shallow-merged over `base`, so omitted fields stay unchanged. Add `visible` to fade a layer in or out during hover. |
 | `stroke` | `Partial<SquircleStrokeConfig>` | default strokes | Layer-wide stroke overrides. |
 | `opacity` | `Partial<SquircleOpacityConfig>` | default opacity | Layer-wide opacity overrides. |
 | `className` | `string` | none | Extra class on the layer group. |
 
 ### `SquircleVariantConfig`
 
-Each layer has a required `base` variant plus an optional `hover` variant. `hover` can be an object shallow-merged over `base`, or a resolver function that returns a variant to shallow-merge over the resolved layer's `base`.
+Each layer has a required `base` variant plus an optional `hover` state. `hover` can be an object shallow-merged over `base`, or a resolver function that returns a state to shallow-merge over the resolved layer's `base`.
 
 | Field | Values | Default | Meaning |
 | --- | --- | --- | --- |
-| `material` | `solid`, `transparent`, `wireframe` | `wireframe` | Prism rendering mode. |
-| `paletteId` | `13` through `20` | `15` | Palette from `SQUIRCLE_PALETTES`. |
-| `effect` | `off`, `metal`, `mesh` | `off` | Top-face surface effect for solid and transparent materials. Ignored by wireframe material. |
-| `grain` | `boolean` | `false` | Adds subtle multiply-blended surface grain clipped to the top face for solid and transparent materials. Ignored by wireframe material. |
+| `material` | `solid`, `glass`, `wireframe` | `wireframe` | Prism rendering mode. `transparent` is accepted as a deprecated alias for `glass`. |
+| `paletteId` | `13` through `21` | `15` | Palette from `SQUIRCLE_PALETTES`. |
+| `effect` | `off`, `metal`, `mesh` | `off` | Top-face surface effect for solid and glass materials. Ignored by wireframe material. |
+| `grain` | `boolean` | `false` | Adds subtle multiply-blended surface grain clipped to the top face for solid and glass materials. Ignored by wireframe material. |
 | `text` | `string`, `false` | none | Render top-plane text. Pass a string such as `"GPU"` or `"{}"`; pass `false` in a hover variant to hide inherited text. |
 | `line` | `solid`, `dotted`, `dashed`, `false` | `false` | Render a top-plane inner line. |
 | `textStyle` | `solid`, `wireframe` | `solid` | Filled or outlined text. |
-| `textColor` | `auto`, `white`, `black` | `auto` | Text paint for solid/transparent material. `auto` uses the palette annotation color. |
+| `textColor` | `auto`, `white`, `black` | `auto` | Text paint for solid/glass material. `auto` uses palette annotation color on solid and contrast paint on glass. |
 | `textSize` | `number` | `62` | Text font size. |
 | `textFontFamily` | `string` | `Arial, Helvetica, sans-serif` | SVG text font family. |
 | `textFontWeight` | `string`, `number` | `400` | SVG text font weight. |
-| `lineColor` | `auto`, `white`, `black` | `auto` | Line paint for solid/transparent material. |
+| `lineColor` | `auto`, `white`, `black` | `auto` | Line paint for solid/glass material. `auto` uses palette annotation color on solid and contrast paint on glass. |
 | `stroke` | `Partial<SquircleStrokeConfig>` | default strokes | Per-variant stroke overrides. |
 | `opacity` | `Partial<SquircleOpacityConfig>` | default opacity | Per-variant opacity overrides. |
 
-`auto` is the palette-managed annotation paint. On solid and transparent materials it resolves to the palette `labelFill`; on wireframe material, text and line paint are driven by the wire gradients.
+`SquircleLayerHoverState` supports every `SquircleVariantConfig` field plus `visible?: boolean`. Use `visible` only in `hover`, not in `base`, when a hover interaction should fade a layer in or out.
+
+`auto` is material-aware annotation paint. On solid material it resolves to the palette `labelFill`; on glass material it chooses black or white by contrast against the translucent top face over the current theme stage; on wireframe material, text and line paint are driven by the wire gradients.
 
 ### `SquircleLayerGeometryConfig`
 
@@ -203,7 +205,7 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `wireOpacity` | `0.88` | Visible wireframe outline opacity. |
 | `hidden` | `1.2` | Hidden/back wireframe guide width. |
 | `hiddenOpacity` | `0.28` | Hidden/back wireframe guide opacity. |
-| `line` | `2.2` | Line-inlay width for solid/transparent material. |
+| `line` | `2.2` | Line-inlay width for solid/glass material. |
 | `wireLine` | `1.6` | Line-inlay width for wireframe material. |
 | `labelWire` | `1.1` | Outlined text stroke width. |
 
@@ -211,13 +213,13 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `transparentFace` | `0.38` | Face opacity for `material: "transparent"`. |
-| `transparentAnnotation` | `0.62` | Text/line opacity on transparent material. |
+| `transparentFace` | `0.26` | Face opacity for `material: "glass"`; historical name retained for compatibility. |
+| `transparentAnnotation` | `0.88` | Text/line opacity on glass material; historical name retained for compatibility. |
 | `solidAnnotation` | `0.88` | Text/line opacity on solid or wireframe material. |
 
 ### Palettes
 
-`paletteId` accepts any id from `SQUIRCLE_PALETTE_IDS`: `13`, `14`, `15`, `16`, `17`, `18`, `19`, `20`. The palette object fields are:
+`paletteId` accepts any id from `SQUIRCLE_PALETTE_IDS`: `13`, `14`, `15`, `16`, `17`, `18`, `19`, `20`, `21`. The palette object fields are:
 
 | Field | Meaning |
 | --- | --- |
@@ -225,17 +227,21 @@ Scene geometry supplies defaults for layers plus shared camera/projection/viewBo
 | `label` | Human-readable palette name. |
 | `top` | Top-face gradient stops. |
 | `side` | Side-wall gradient stops. |
+| `wire` | Optional wireframe prism/line gradient stops. Defaults to `top` when omitted. |
 | `textWire` | Gradient stops used for outlined text. |
 | `labelFill` | Automatic filled text/line color. |
 | `topEdge` | Top-face hairline stroke color. |
 | `sideEdge` | Side-wall hairline stroke color. |
 | `swatch` | Two-color UI swatch. |
+| `dark` | Optional dark-theme overrides for top, side, wire, textWire, labelFill, edges, and swatch. |
 
-`effect: "off"` uses the normal static top gradient. `metal` clips animated color fields to the top face. Chrome/Firefox keep the original SVG-blur metal backend; Safari/iOS use a no-filter soft-blob backend for performance. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected alpha palette. `grain: true` can be combined with `off`, `metal`, or `mesh`.
+`effect: "off"` uses the normal static top gradient. `metal` clips animated color fields to the top face. Chrome/Firefox keep the original SVG-blur metal backend; Safari/iOS use a no-filter soft-blob backend for performance. `mesh` renders an animated four-corner bilinear gradient whose corner colors slowly trade places. Both animated effects are authored in local squircle-plane coordinates and projected through the same isometric matrix as text. Effect colors are derived from the selected palette. `grain: true` can be combined with `off`, `metal`, or `mesh`.
+
+`material: "glass"` renders as a glass-like prism: lower-alpha top/side faces, palette wire-gradient rims, and the generated hidden/back guide visible through the faces. It is not just a lightened solid palette. `material: "transparent"` is still accepted and normalized to `glass` for older configs.
 
 ## Surface Effects
 
-Solid and transparent squircles can opt into animated top-surface effects with `effect: "metal"` or `effect: "mesh"`. Effects keep the prism geometry fixed: only the top face paint changes. Transparent effects keep the material's `transparentFace` opacity on the animated color field.
+Solid and glass squircles can opt into animated top-surface effects with `effect: "metal"` or `effect: "mesh"`. Effects keep the prism geometry fixed: only the top face paint changes. Glass effects keep the material's `transparentFace` opacity on the animated color field.
 
 The color field is built in the flat squircle plane, blurred in that local coordinate system, and then projected onto the top face. The generated top polygon remains the screen-space clip path. This keeps the gradients reading as surface paint instead of flat circles floating above the prism.
 

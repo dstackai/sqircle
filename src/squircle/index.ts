@@ -7,6 +7,7 @@ export {
   SQUIRCLE_PALETTE_IDS,
   SQUIRCLE_PALETTES,
   getSquirclePalette,
+  getSquirclePaletteSwatch,
   isSquirclePaletteId
 } from "./palettes";
 export type { SquircleReactCodeOptions } from "./codeExport";
@@ -14,6 +15,7 @@ export type { SquircleEditorProps } from "./SquircleEditor";
 export type {
   SquircleGradientStop,
   SquirclePalette,
+  SquirclePaletteTheme,
   SquirclePaletteId
 } from "./palettes";
 export type {

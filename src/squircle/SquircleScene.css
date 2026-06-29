@@ -33,6 +33,7 @@
 
 .sq-layer {
   cursor: pointer;
+  transition: opacity var(--sq-transition-ms, 220ms) ease;
 }
 
 .sq-layer.is-selected {

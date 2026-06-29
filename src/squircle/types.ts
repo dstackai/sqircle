@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 
-export type SquircleMaterial = "solid" | "transparent" | "wireframe";
+export type SquircleMaterial = "solid" | "glass" | "transparent" | "wireframe";
 export type SquircleAnnotationColor = "auto" | "white" | "black";
 export type SquircleTextStyle = "solid" | "wireframe";
 export type SquircleLineStyle = "solid" | "dotted" | "dashed";
@@ -70,8 +70,11 @@ export interface SquircleLayerHoverContext {
   hoveredIndex: number;
 }
 
-export type SquircleLayerHoverResolver = (context: SquircleLayerHoverContext) => SquircleVariantConfig | false | null | undefined;
-export type SquircleLayerHoverConfig = SquircleVariantConfig | SquircleLayerHoverResolver;
+export type SquircleLayerHoverState = SquircleVariantConfig & {
+  visible?: boolean;
+};
+export type SquircleLayerHoverResolver = (context: SquircleLayerHoverContext) => SquircleLayerHoverState | false | null | undefined;
+export type SquircleLayerHoverConfig = SquircleLayerHoverState | SquircleLayerHoverResolver;
 
 export interface SquircleLayerConfig {
   id: string;

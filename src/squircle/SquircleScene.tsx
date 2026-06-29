@@ -7,13 +7,14 @@ import {
   isSquirclePaletteId,
   SQUIRCLE_PALETTES
 } from "./palettes";
-import type { SquircleGradientStop } from "./palettes";
+import type { SquircleGradientStop, SquirclePalette } from "./palettes";
 import type {
   SquircleAnnotationColor,
   SquircleGeometryConfig,
   SquircleLayerClickEvent,
   SquircleLayerConfig,
   SquircleLayerGeometryConfig,
+  SquircleLayerHoverState,
   SquircleLineStyle,
   SquircleMaterial,
   SquircleOpacityConfig,
@@ -21,6 +22,7 @@ import type {
   SquircleSceneProps,
   SquircleStrokeConfig,
   SquircleEffect,
+  SquircleTheme,
   SquircleTextStyle,
   SquircleVariantConfig
 } from "./types";
@@ -39,8 +41,8 @@ const DEFAULT_STROKES: SquircleStrokeConfig = {
 };
 
 const DEFAULT_OPACITY: SquircleOpacityConfig = {
-  transparentFace: 0.38,
-  transparentAnnotation: 0.62,
+  transparentFace: 0.26,
+  transparentAnnotation: 0.88,
   solidAnnotation: 0.88
 };
 
@@ -49,6 +51,12 @@ const DEFAULT_TEXT_SIZE = 62;
 const DEFAULT_TEXT_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 const DEFAULT_TEXT_FONT_WEIGHT = 400;
 const DEFAULT_EFFECT: SquircleEffect = "off";
+const ANNOTATION_BLACK = "#05070a";
+const ANNOTATION_WHITE = "#ffffff";
+const GLASS_BACKGROUND_BY_THEME: Record<SquircleTheme, string> = {
+  light: "#ffffff",
+  dark: "#101925"
+};
 const GRAIN_OPACITY = 0.46;
 const GRAIN_BASE_FREQUENCY = 2.4;
 const GRAIN_OCTAVES = 3;
@@ -78,7 +86,7 @@ const METAL_LIGHT_BLOBS = [
 ];
 
 type ResolvedVariant = {
-  material: SquircleMaterial;
+  material: ResolvedMaterial;
   paletteId: string;
   effect: SquircleEffect;
   grain: boolean;
@@ -94,6 +102,8 @@ type ResolvedVariant = {
   opacity: SquircleOpacityConfig;
 };
 
+type ResolvedMaterial = Exclude<SquircleMaterial, "transparent">;
+
 type EffectColorSet = readonly [string, string, string, string, string, string, string];
 
 type RenderPalette = {
@@ -103,6 +113,7 @@ type RenderPalette = {
   sideEdge: string;
   top: SquircleGradientStop[];
   side: SquircleGradientStop[];
+  wire: SquircleGradientStop[];
   textWire: SquircleGradientStop[];
   effectColors: EffectColorSet;
 };
@@ -162,31 +173,31 @@ export function SquircleScene({
   const prefix = idPrefix ?? `sq-${reactId}`;
   const geometryKey = JSON.stringify(geometry ?? {});
   const baseGeometry = useMemo(() => createSquircleGeometry(geometry), [geometryKey]);
-  const visibleLayers = useMemo(() => layers.filter((layer) => layer.visible !== false), [layers]);
-  const layerGeometryKey = JSON.stringify(visibleLayers.map((layer) => ({
+  const renderLayers = useMemo(() => layers.filter(layerCanRender), [layers]);
+  const layerGeometryKey = JSON.stringify(renderLayers.map((layer) => ({
     id: layer.id,
     geometry: layer.geometry,
     offset: layer.offset
   })));
   const layerExtent = useMemo(() => Math.max(
     0,
-    ...visibleLayers.map((layer) => {
+    ...renderLayers.map((layer) => {
       const layerGeometry = createLayerGeometry(geometry, undefined, layer.geometry);
       return (layer.offset?.y ?? 0) + layerGeometry.sideBounds.maxY;
     })
-  ), [geometryKey, layerGeometryKey, visibleLayers]);
+  ), [geometryKey, layerGeometryKey, renderLayers]);
   const viewBoxHeight = geometry?.viewBoxHeight ?? (fitToLayers ? Math.max(baseGeometry.config.viewBoxHeight, layerExtent + 18) : baseGeometry.config.viewBoxHeight);
   const sceneGeometry = useMemo(() => (geometry?.viewBoxHeight === viewBoxHeight
     ? baseGeometry
     : createSquircleGeometry({ ...geometry, viewBoxHeight })), [baseGeometry, geometry, viewBoxHeight]);
-  const layerModels = useMemo<LayerModel[]>(() => visibleLayers.map((layer, index) => {
+  const layerModels = useMemo<LayerModel[]>(() => renderLayers.map((layer, index) => {
     const layerPrefix = `${prefix}-${index}-${safeIdPart(layer.id)}`;
     const layerGeometry = layer.geometry
       ? createLayerGeometry(geometry, viewBoxHeight, layer.geometry)
       : sceneGeometry;
 
     return { layer, index, prefix: layerPrefix, geometry: layerGeometry };
-  }), [geometry, prefix, sceneGeometry, viewBoxHeight, visibleLayers]);
+  }), [geometry, prefix, sceneGeometry, viewBoxHeight, renderLayers]);
   const layerEventModels = useMemo(() => new Map(
     layerModels.map(({ layer, index }) => [layer.id, { layer, index }])
   ), [layerModels]);
@@ -214,16 +225,21 @@ export function SquircleScene({
   const hasGrainCandidate = layerModels.some(({ layer }) => layerHasGrainSurface(layer));
   const hoverMap = useMemo(() => createResolvedHoverMap({
     layerModels,
-    layers: visibleLayers,
+    layers: renderLayers,
     hoverState: resolvedHoverState,
     controlledObjectHoverLayerIds
-  }), [controlledObjectHoverLayerIds, layerModels, visibleLayers, resolvedHoverState]);
+  }), [controlledObjectHoverLayerIds, layerModels, renderLayers, resolvedHoverState]);
   const motionEnabled = layerModels.some(({ layer }) => {
-    if (layerHasAnimatedSurface(layer)) return true;
     const hover = hoverMap.get(layer.id);
-    if (!hover?.enabled) return false;
-    const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
-    return variantHasAnimatedSurface(hoverVariant);
+    if (hover?.enabled) {
+      if (!effectiveLayerVisible(layer, hover)) return false;
+      const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+      return variantHasAnimatedSurface(hoverVariant);
+    }
+
+    if (layer.visible === false) return false;
+    const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
+    return variantHasAnimatedSurface(base);
   });
   const [sceneInView, setSceneInView] = useState(true);
   const metalBackend = useMemo(detectMetalBackend, []);
@@ -378,7 +394,7 @@ export function SquircleScene({
       onClick={handleClick}
     >
       {layerModels.map((model) => (
-        <SquircleDefinitions key={`${model.prefix}-defs`} prefix={model.prefix} geometry={model.geometry} />
+        <SquircleDefinitions key={`${model.prefix}-defs`} prefix={model.prefix} geometry={model.geometry} theme={theme} />
       ))}
       {layerModels.map(({ layer, index, prefix: layerPrefix, geometry: layerGeometry }) => (
         <SquircleLayer
@@ -389,6 +405,7 @@ export function SquircleScene({
           prefix={layerPrefix}
           motionEnabled={motionActive}
           metalBackend={metalBackend}
+          theme={theme}
           selected={selectedLayerId === layer.id}
         />
       ))}
@@ -423,7 +440,31 @@ function safeIdPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-") || "layer";
 }
 
-function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: ReturnType<typeof createSquircleGeometry> }) {
+function layerCanRender(layer: SquircleLayerConfig): boolean {
+  return layer.visible !== false || typeof layer.hover === "function";
+}
+
+function baseLayerVisible(layer: SquircleLayerConfig): boolean {
+  return layer.visible !== false;
+}
+
+function hoverLayerVisible(layer: SquircleLayerConfig, hover: RenderHoverConfig | null): boolean {
+  return hover?.visible ?? baseLayerVisible(layer);
+}
+
+function effectiveLayerVisible(layer: SquircleLayerConfig, hover: RenderHoverConfig | null): boolean {
+  return hover?.enabled ? hoverLayerVisible(layer, hover) : baseLayerVisible(layer);
+}
+
+function SquircleDefinitions({
+  prefix,
+  geometry,
+  theme
+}: {
+  prefix: string;
+  geometry: ReturnType<typeof createSquircleGeometry>;
+  theme: SquircleTheme;
+}) {
   const topPoints = pointsToString(geometry.topPoints);
   const planeWidth = geometry.config.halfSize * 2;
   const planeBlur = roundNumber(planeWidth * 0.13);
@@ -457,8 +498,9 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
       >
         <feGaussianBlur stdDeviation={planeBlur} />
       </filter>
-      {Object.values(SQUIRCLE_PALETTES).map((palette) => {
-        const effectColors = alphaPaletteEffectColors(palette);
+      {(Object.values(SQUIRCLE_PALETTES) as SquirclePalette[]).map((palette) => {
+        const renderPalette = themedPaletteValues(palette, theme);
+        const effectColors = paletteEffectColors(renderPalette);
 
         return (
           <g key={palette.id}>
@@ -468,7 +510,7 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
               y1={geometry.topBounds.minY}
               x2={geometry.topBounds.maxX}
               y2={geometry.topBounds.maxY}
-              stops={palette.top}
+              stops={renderPalette.top}
             />
             <LinearGradient
               id={`${prefix}-side-${palette.id}`}
@@ -476,7 +518,15 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
               y1={geometry.sideBounds.minY}
               x2={geometry.sideBounds.maxX}
               y2={geometry.sideBounds.maxY}
-              stops={palette.side}
+              stops={renderPalette.side}
+            />
+            <LinearGradient
+              id={`${prefix}-wire-${palette.id}`}
+              x1={geometry.topBounds.minX}
+              y1={geometry.topBounds.minY}
+              x2={geometry.topBounds.maxX}
+              y2={geometry.topBounds.maxY}
+              stops={renderPalette.wire}
             />
             <LinearGradient
               id={`${prefix}-text-surface-${palette.id}`}
@@ -484,7 +534,7 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
               y1={-0.1}
               x2={425.6}
               y2={0.07}
-              stops={palette.top}
+              stops={renderPalette.top}
             />
             <LinearGradient
               id={`${prefix}-text-wire-${palette.id}`}
@@ -492,7 +542,7 @@ function SquircleDefinitions({ prefix, geometry }: { prefix: string; geometry: R
               y1={-24}
               x2={64}
               y2={24}
-              stops={palette.textWire}
+              stops={renderPalette.textWire}
             />
             {effectColors.map((color, index) => (
               <SoftRadialGradient key={`${palette.id}-${index}`} id={`${prefix}-soft-${palette.id}-${index}`} color={color} />
@@ -545,6 +595,7 @@ function SquircleLayer({
   prefix,
   motionEnabled,
   metalBackend,
+  theme,
   selected
 }: {
   layer: SquircleLayerConfig;
@@ -553,15 +604,25 @@ function SquircleLayer({
   prefix: string;
   motionEnabled: boolean;
   metalBackend: MetalBackend;
+  theme: SquircleTheme;
   selected: boolean;
 }) {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
-  const hasHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
-  const cssHover = Boolean(hasHover && hover?.mode === "css");
+  const hasVariantHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+  const baseVisible = baseLayerVisible(layer);
+  const hoverVisible = hoverLayerVisible(layer, hover);
+  const hasVisibilityHover = hover?.visible !== undefined && hoverVisible !== baseVisible;
+  const hasHover = hasVariantHover || hasVisibilityHover;
+  const cssHover = Boolean(hasVariantHover && hover?.mode === "css");
   const controlledHoverEnabled = Boolean(hasHover && hover?.mode === "controlled" && hover.enabled);
+  const layerVisible = controlledHoverEnabled ? hoverVisible : baseVisible;
   const x = layer.offset?.x ?? 0;
   const y = layer.offset?.y ?? 0;
+  const layerStyle = {
+    opacity: layerVisible ? 1 : 0,
+    pointerEvents: baseVisible || layerVisible ? undefined : "none"
+  } as CSSProperties;
 
   return (
     <g
@@ -577,9 +638,10 @@ function SquircleLayer({
       data-hover-mode={hover?.mode ?? "none"}
       data-hover-visible={String(controlledHoverEnabled)}
       transform={`translate(${x} ${y})`}
+      style={layerStyle}
     >
-      <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} />
-      {hasHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} /> : null}
+      <SquircleVariant className="sq-base" variant={base} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} />
+      {hasVariantHover && hoverVariant ? <SquircleVariant className="sq-hover" variant={hoverVariant} geometry={geometry} prefix={prefix} motionEnabled={motionEnabled} metalBackend={metalBackend} theme={theme} /> : null}
     </g>
   );
 }
@@ -588,6 +650,7 @@ type RenderHoverConfig = {
   enabled: boolean;
   mode: "css" | "controlled";
   variant: SquircleVariantConfig;
+  visible?: boolean;
 };
 
 type ResolvedHoverState = {
@@ -605,11 +668,13 @@ function resolveLayerHover(
 ): RenderHoverConfig | null {
   if (!layer.hover) return null;
   if (typeof layer.hover !== "function") {
+    const hover = splitHoverState(layer.hover);
     const controlledObjectHover = controlledObjectHoverLayerIds.has(layer.id);
     return {
       enabled: controlledObjectHover && hoveredLayerId === layer.id && visible,
       mode: controlledObjectHover ? "controlled" : "css",
-      variant: layer.hover
+      variant: hover.variant,
+      visible: hover.visible
     };
   }
   if (!hoveredLayerId) return null;
@@ -618,7 +683,7 @@ function resolveLayerHover(
   const hoveredLayer = hoveredIndex >= 0 ? layers[hoveredIndex] : null;
   if (!hoveredLayer) return null;
 
-  const variant = layer.hover({
+  const state = layer.hover({
     layer,
     index,
     layers,
@@ -626,8 +691,10 @@ function resolveLayerHover(
     hoveredLayer,
     hoveredIndex
   });
+  if (!state) return null;
 
-  return variant ? { enabled: visible, mode: "controlled", variant } : null;
+  const hover = splitHoverState(state);
+  return { enabled: visible, mode: "controlled", variant: hover.variant, visible: hover.visible };
 }
 
 function createResolvedHoverMap({
@@ -645,6 +712,11 @@ function createResolvedHoverMap({
     layer.id,
     resolveLayerHover(layer, index, layers, hoverState.layerId, hoverState.visible, controlledObjectHoverLayerIds)
   ]));
+}
+
+function splitHoverState(state: SquircleLayerHoverState): { variant: SquircleVariantConfig; visible?: boolean } {
+  const { visible, ...variant } = state;
+  return { variant, visible };
 }
 
 function createLayerClickEvent(
@@ -675,7 +747,8 @@ function SquircleVariant({
   geometry,
   prefix,
   motionEnabled,
-  metalBackend
+  metalBackend,
+  theme
 }: {
   className: string;
   variant: ResolvedVariant;
@@ -683,10 +756,12 @@ function SquircleVariant({
   prefix: string;
   motionEnabled: boolean;
   metalBackend: MetalBackend;
+  theme: SquircleTheme;
 }) {
-  const palette = getRenderPalette(variant.paletteId);
+  const palette = getRenderPalette(variant.paletteId, theme);
   const topFill = `url(#${prefix}-top-${palette.id})`;
   const sideFill = `url(#${prefix}-side-${palette.id})`;
+  const wireFill = `url(#${prefix}-wire-${palette.id})`;
   const textSurfaceFill = `url(#${prefix}-text-surface-${palette.id})`;
   const textWireFill = `url(#${prefix}-text-wire-${palette.id})`;
   const wallPoints = pointsToString(geometry.wallPoints);
@@ -694,15 +769,16 @@ function SquircleVariant({
   const hiddenPoints = pointsToString(geometry.hiddenPoints);
   const inlayPoints = pointsToString(geometry.inlayPoints);
   const topClipId = `${prefix}-top-clip`;
+  const glass = variant.material === "glass";
 
   return (
-    <g className={["sq-variant", className, `sq-material-${variant.material}`].join(" ")}>
+    <g className={["sq-variant", className, `sq-material-${variant.material}`, glass ? "sq-material-transparent" : ""].filter(Boolean).join(" ")}>
       {variant.material === "wireframe" ? (
         <>
           <polyline
             className="sq-hidden"
             points={hiddenPoints}
-            stroke={topFill}
+            stroke={wireFill}
             strokeWidth={variant.stroke.hidden}
             opacity={variant.stroke.hiddenOpacity}
           />
@@ -710,7 +786,7 @@ function SquircleVariant({
             className="sq-face sq-wire-side"
             points={wallPoints}
             fill="none"
-            stroke={topFill}
+            stroke={wireFill}
             strokeWidth={variant.stroke.wire}
             strokeOpacity={variant.stroke.wireOpacity}
           />
@@ -718,21 +794,30 @@ function SquircleVariant({
             className="sq-face sq-wire-top"
             points={topPoints}
             fill="none"
-            stroke={topFill}
+            stroke={wireFill}
             strokeWidth={variant.stroke.wire}
             strokeOpacity={variant.stroke.wireOpacity}
           />
         </>
       ) : (
         <>
+          {glass ? (
+            <polyline
+              className="sq-hidden sq-glass-hidden sq-transparent-hidden"
+              points={hiddenPoints}
+              stroke={wireFill}
+              strokeWidth={glassHiddenWidth(variant)}
+              opacity={glassHiddenOpacity(variant)}
+            />
+          ) : null}
           <polygon
-            className="sq-face sq-solid-side"
+            className={["sq-face sq-solid-side", glass ? "sq-glass-side sq-transparent-side" : ""].filter(Boolean).join(" ")}
             points={wallPoints}
             fill={sideFill}
-            fillOpacity={variant.material === "transparent" ? variant.opacity.transparentFace : 1}
-            stroke={palette.sideEdge}
-            strokeWidth={variant.stroke.face}
-            strokeOpacity={variant.stroke.faceOpacity}
+            fillOpacity={glass ? glassSideOpacity(variant) : 1}
+            stroke={glass ? wireFill : palette.sideEdge}
+            strokeWidth={glass ? glassEdgeWidth(variant) : variant.stroke.face}
+            strokeOpacity={glass ? glassSideEdgeOpacity(variant) : variant.stroke.faceOpacity}
           />
           <SolidTopFace
             variant={variant}
@@ -741,6 +826,7 @@ function SquircleVariant({
             prefix={prefix}
             topClipId={topClipId}
             topFill={topFill}
+            wireFill={wireFill}
             topPoints={topPoints}
             motionEnabled={motionEnabled}
             metalBackend={metalBackend}
@@ -751,7 +837,7 @@ function SquircleVariant({
         <polygon
           className="sq-line"
           points={inlayPoints}
-          stroke={linePaint(variant, palette, topFill)}
+          stroke={linePaint(variant, palette, wireFill, theme)}
           strokeWidth={variant.material === "wireframe" ? variant.stroke.wireLine : variant.stroke.line}
           strokeDasharray={lineDasharray(variant.line)}
           strokeLinecap={lineStrokeLinecap(variant.line)}
@@ -767,7 +853,7 @@ function SquircleVariant({
           fontFamily={variant.textFontFamily}
           fontSize={variant.textSize}
           fontWeight={variant.textFontWeight}
-          {...textPaintProps(variant, palette, textSurfaceFill, textWireFill)}
+          {...textPaintProps(variant, palette, textSurfaceFill, textWireFill, theme)}
         >
           {variant.text}
         </text>
@@ -783,6 +869,7 @@ function SolidTopFace({
   prefix,
   topClipId,
   topFill,
+  wireFill,
   topPoints,
   motionEnabled,
   metalBackend
@@ -793,13 +880,18 @@ function SolidTopFace({
   prefix: string;
   topClipId: string;
   topFill: string;
+  wireFill: string;
   topPoints: string;
   motionEnabled: boolean;
   metalBackend: MetalBackend;
 }) {
-  const fillOpacity = variant.material === "transparent" ? variant.opacity.transparentFace : 1;
+  const glass = variant.material === "glass";
+  const fillOpacity = glass ? variant.opacity.transparentFace : 1;
   const effect = variant.material === "wireframe" ? "off" : variant.effect;
-  const effectOpacity = variant.material === "transparent" ? fillOpacity : 1;
+  const effectOpacity = glass ? fillOpacity : 1;
+  const stroke = glass ? wireFill : palette.topEdge;
+  const strokeWidth = glass ? glassEdgeWidth(variant) : variant.stroke.face;
+  const strokeOpacity = glass ? glassTopEdgeOpacity(variant) : variant.stroke.faceOpacity;
 
   if (effect === "mesh") {
     return (
@@ -816,9 +908,9 @@ function SolidTopFace({
           className="sq-face sq-solid-top sq-effect-outline"
           points={topPoints}
           fill="none"
-          stroke={palette.topEdge}
-          strokeWidth={variant.stroke.face}
-          strokeOpacity={variant.stroke.faceOpacity}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeOpacity={strokeOpacity}
         />
       </>
     );
@@ -840,9 +932,9 @@ function SolidTopFace({
           className="sq-face sq-solid-top sq-effect-outline"
           points={topPoints}
           fill="none"
-          stroke={palette.topEdge}
-          strokeWidth={variant.stroke.face}
-          strokeOpacity={variant.stroke.faceOpacity}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeOpacity={strokeOpacity}
         />
       </>
     );
@@ -850,13 +942,13 @@ function SolidTopFace({
 
   return (
     <polygon
-      className="sq-face sq-solid-top"
+      className={["sq-face sq-solid-top", glass ? "sq-glass-top sq-transparent-top" : ""].filter(Boolean).join(" ")}
       points={topPoints}
       fill={topFill}
       fillOpacity={fillOpacity}
-      stroke={palette.topEdge}
-      strokeWidth={variant.stroke.face}
-      strokeOpacity={variant.stroke.faceOpacity}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeOpacity={strokeOpacity}
     />
   );
 }
@@ -1081,7 +1173,7 @@ function resolveVariant(
   layerStroke: Partial<SquircleStrokeConfig> = {},
   layerOpacity: Partial<SquircleOpacityConfig> = {}
 ): ResolvedVariant {
-  const material = variant.material ?? "wireframe";
+  const material = normalizeMaterial(variant.material);
 
   return {
     material,
@@ -1120,18 +1212,25 @@ function normalizeLineStyle(line: SquircleVariantConfig["line"]): SquircleLineSt
   return null;
 }
 
+function normalizeMaterial(material: SquircleMaterial | undefined): ResolvedMaterial {
+  if (material === "solid" || material === "wireframe") return material;
+  if (material === "glass" || material === "transparent") return "glass";
+  return "wireframe";
+}
+
 function resolvePaletteId(paletteId: string | undefined): string {
   return isSquirclePaletteId(paletteId) ? paletteId : DEFAULT_PALETTE_ID;
 }
 
 function annotationPaint(color: SquircleAnnotationColor, labelFill: string): string {
-  if (color === "white") return "#ffffff";
-  if (color === "black") return "#05070a";
+  if (color === "white") return ANNOTATION_WHITE;
+  if (color === "black") return ANNOTATION_BLACK;
   return labelFill;
 }
 
-function linePaint(variant: ResolvedVariant, palette: RenderPalette, topFill: string): string {
-  if (variant.material === "wireframe") return topFill;
+function linePaint(variant: ResolvedVariant, palette: RenderPalette, wireFill: string, theme: SquircleTheme): string {
+  if (variant.material === "wireframe") return wireFill;
+  if (variant.material === "glass") return glassAnnotationPaint(variant.lineColor, variant, palette, theme);
   return annotationPaint(variant.lineColor, palette.labelFill);
 }
 
@@ -1146,15 +1245,59 @@ function lineStrokeLinecap(line: SquircleLineStyle): SVGProps<SVGPolygonElement>
 }
 
 function annotationOpacity(variant: ResolvedVariant): number {
-  if (variant.material === "transparent") return variant.opacity.transparentAnnotation;
+  if (variant.material === "glass") return variant.opacity.transparentAnnotation;
   return variant.opacity.solidAnnotation;
+}
+
+function glassAnnotationPaint(
+  color: SquircleAnnotationColor,
+  variant: ResolvedVariant,
+  palette: RenderPalette,
+  theme: SquircleTheme
+): string {
+  if (color !== "auto") return annotationPaint(color, palette.labelFill);
+  return glassAutoAnnotationPaint(variant, palette, theme);
+}
+
+function glassAutoAnnotationPaint(variant: ResolvedVariant, palette: RenderPalette, theme: SquircleTheme): string {
+  const background = GLASS_BACKGROUND_BY_THEME[theme];
+  const topMid = sampleStops(palette.top, 0.5);
+  const effectiveTop = blendHex(topMid, background, variant.opacity.transparentFace);
+  const blackContrast = contrastRatio(ANNOTATION_BLACK, effectiveTop);
+  const whiteContrast = contrastRatio(ANNOTATION_WHITE, effectiveTop);
+  return blackContrast >= whiteContrast ? ANNOTATION_BLACK : ANNOTATION_WHITE;
+}
+
+function glassSideOpacity(variant: ResolvedVariant): number {
+  return clampOpacity(variant.opacity.transparentFace * 0.7);
+}
+
+function glassEdgeWidth(variant: ResolvedVariant): number {
+  return roundNumber(Math.max(variant.stroke.face * 1.5, variant.stroke.wire * 0.42), 2);
+}
+
+function glassTopEdgeOpacity(variant: ResolvedVariant): number {
+  return clampOpacity(Math.max(variant.stroke.faceOpacity * 0.86, variant.stroke.wireOpacity * 0.62));
+}
+
+function glassSideEdgeOpacity(variant: ResolvedVariant): number {
+  return clampOpacity(Math.max(variant.stroke.faceOpacity * 0.62, variant.stroke.wireOpacity * 0.42));
+}
+
+function glassHiddenOpacity(variant: ResolvedVariant): number {
+  return clampOpacity(Math.min(variant.stroke.hiddenOpacity * 0.65, variant.opacity.transparentFace * 0.7));
+}
+
+function glassHiddenWidth(variant: ResolvedVariant): number {
+  return roundNumber(variant.stroke.hidden * 0.72, 2);
 }
 
 function textPaintProps(
   variant: ResolvedVariant,
   palette: RenderPalette,
   textSurfaceFill: string,
-  textWireFill: string
+  textWireFill: string,
+  theme: SquircleTheme
 ): SVGProps<SVGTextElement> {
   const opacity = annotationOpacity(variant);
 
@@ -1175,17 +1318,21 @@ function textPaintProps(
     };
   }
 
+  const paint = variant.material === "glass"
+    ? glassAnnotationPaint(variant.textColor, variant, palette, theme)
+    : annotationPaint(variant.textColor, palette.labelFill);
+
   if (variant.textStyle === "wireframe") {
     return {
       fill: "none",
-      stroke: annotationPaint(variant.textColor, palette.labelFill),
+      stroke: paint,
       strokeWidth: variant.stroke.labelWire,
       opacity
     };
   }
 
   return {
-    fill: annotationPaint(variant.textColor, palette.labelFill),
+    fill: paint,
     stroke: "none",
     strokeWidth: 0,
     opacity
@@ -1298,8 +1445,9 @@ function layerHasAnimatedSurface(layer: SquircleLayerConfig): boolean {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   if (variantHasAnimatedSurface(base)) return true;
   if (layer.hover && typeof layer.hover !== "function") {
-    const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
-    if (variantHasAnimatedSurface(hover)) return true;
+    const hover = splitHoverState(layer.hover);
+    const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+    if (variantHasAnimatedSurface(hoverVariant)) return true;
   }
   return false;
 }
@@ -1311,21 +1459,25 @@ function variantHasAnimatedSurface(variant: ResolvedVariant): boolean {
 function layerRequiresControlledObjectHover(layer: SquircleLayerConfig, lowerGrainCanBeOccluded = false): boolean {
   if (!layer.hover || typeof layer.hover === "function") return false;
 
+  const hover = splitHoverState(layer.hover);
+  if (hover.visible !== undefined && hover.visible !== baseLayerVisible(layer)) return true;
+
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
-  const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
-  if (variantSignature(base) === variantSignature(hover)) return false;
+  const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+  if (variantSignature(base) === variantSignature(hoverVariant)) return false;
 
-  if (variantHasGrainSurface(base) || variantHasGrainSurface(hover)) return true;
+  if (variantHasGrainSurface(base) || variantHasGrainSurface(hoverVariant)) return true;
 
-  return lowerGrainCanBeOccluded && variantOccludesLowerGrain(base) !== variantOccludesLowerGrain(hover);
+  return lowerGrainCanBeOccluded && variantOccludesLowerGrain(base) !== variantOccludesLowerGrain(hoverVariant);
 }
 
 function layerHasGrainSurface(layer: SquircleLayerConfig): boolean {
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   if (variantHasGrainSurface(base)) return true;
   if (layer.hover && typeof layer.hover !== "function") {
-    const hover = resolveVariant({ ...layer.base, ...layer.hover }, layer.stroke, layer.opacity);
-    if (variantHasGrainSurface(hover)) return true;
+    const hover = splitHoverState(layer.hover);
+    const hoverVariant = resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity);
+    if (variantHasGrainSurface(hoverVariant)) return true;
   }
   return false;
 }
@@ -1334,22 +1486,34 @@ function variantHasGrainSurface(variant: ResolvedVariant): boolean {
   return variant.material !== "wireframe" && variant.grain;
 }
 
-function getRenderPalette(paletteId: string): RenderPalette {
+function getRenderPalette(paletteId: string, theme: SquircleTheme): RenderPalette {
   const palette = getSquirclePalette(paletteId);
+  const values = themedPaletteValues(palette, theme);
 
   return {
-    id: palette.id,
-    labelFill: palette.labelFill,
-    topEdge: palette.topEdge,
-    sideEdge: palette.sideEdge,
-    top: palette.top,
-    side: palette.side,
-    textWire: palette.textWire,
-    effectColors: alphaPaletteEffectColors(palette)
+    ...values,
+    effectColors: paletteEffectColors(values)
   };
 }
 
-function alphaPaletteEffectColors(palette: ReturnType<typeof getSquirclePalette>): EffectColorSet {
+function themedPaletteValues(palette: SquirclePalette, theme: SquircleTheme): Omit<RenderPalette, "effectColors"> {
+  const overrides = theme === "dark" ? palette.dark : undefined;
+  const top = overrides?.top ?? palette.top;
+  const side = overrides?.side ?? palette.side;
+
+  return {
+    id: palette.id,
+    labelFill: overrides?.labelFill ?? palette.labelFill,
+    topEdge: overrides?.topEdge ?? palette.topEdge,
+    sideEdge: overrides?.sideEdge ?? palette.sideEdge,
+    top,
+    side,
+    wire: overrides?.wire ?? palette.wire ?? top,
+    textWire: overrides?.textWire ?? palette.textWire
+  };
+}
+
+function paletteEffectColors(palette: Pick<RenderPalette, "top" | "side" | "sideEdge">): EffectColorSet {
   const topStart = palette.top[0]?.color ?? "#f5f0ff";
   const topMid = palette.top[Math.floor(palette.top.length / 2)]?.color ?? topStart;
   const topEnd = palette.top.at(-1)?.color ?? topMid;
@@ -1388,6 +1552,26 @@ function mixHex(colorA: string, colorB: string, amount: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
 }
 
+function blendHex(foreground: string, background: string, opacity: number): string {
+  return mixHex(background, foreground, clampOpacity(opacity));
+}
+
+function contrastRatio(colorA: string, colorB: string): number {
+  const a = relativeLuminance(colorA);
+  const b = relativeLuminance(colorB);
+  const lighter = Math.max(a, b);
+  const darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function relativeLuminance(color: string): number {
+  const [r, g, b] = hexToRgb(color).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
   const full = h.length === 3 ? h.split("").map((char) => char + char).join("") : h;
@@ -1398,8 +1582,12 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-function roundNumber(value: number): number {
-  return Number(value.toFixed(1));
+function roundNumber(value: number, decimals = 1): number {
+  return Number(value.toFixed(decimals));
+}
+
+function clampOpacity(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function detectMetalBackend(): MetalBackend {
@@ -1429,8 +1617,15 @@ function createGrainOverlays({
     const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
     const hover = hoverMap.get(layer.id) ?? null;
     const hoverVariant = hover ? resolveVariant({ ...layer.base, ...hover.variant }, layer.stroke, layer.opacity) : null;
-    const hasHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
-    const hoverEnabled = Boolean(hasHover && hover?.enabled);
+    const hasVariantHover = Boolean(hoverVariant && variantSignature(hoverVariant) !== variantSignature(base));
+    const baseVisible = baseLayerVisible(layer);
+    const hoverVisible = hoverLayerVisible(layer, hover);
+    const hasVisibilityHover = hover?.visible !== undefined && hoverVisible !== baseVisible;
+    const hoverEnabled = Boolean((hasVariantHover || hasVisibilityHover) && hover?.enabled);
+    const baseOpacity = hoverEnabled
+      ? (hasVariantHover ? 0 : visibilityOpacity(hoverVisible))
+      : visibilityOpacity(baseVisible);
+    const hoverOpacity = hoverEnabled ? visibilityOpacity(hoverVisible) : 0;
     const offset = { x: layer.offset?.x ?? 0, y: layer.offset?.y ?? 0 };
     const occlusionPolygons = createHigherLayerOcclusionPolygons(layerModels, layerIndex, hoverMap);
 
@@ -1441,23 +1636,27 @@ function createGrainOverlays({
         offset,
         occlusionPolygons,
         viewBox,
-        opacity: grainOverlayOpacity(base) * (hoverEnabled ? 0 : 1)
+        opacity: grainOverlayOpacity(base) * baseOpacity
       }));
     }
 
-    if (hasHover && hoverVariant && variantHasGrainSurface(hoverVariant)) {
+    if (hasVariantHover && hoverVariant && variantHasGrainSurface(hoverVariant)) {
       overlays.push(createGrainOverlay({
         key: `${prefix}-hover`,
         geometry,
         offset,
         occlusionPolygons,
         viewBox,
-        opacity: grainOverlayOpacity(hoverVariant) * (hoverEnabled ? 1 : 0)
+        opacity: grainOverlayOpacity(hoverVariant) * hoverOpacity
       }));
     }
   });
 
   return overlays;
+}
+
+function visibilityOpacity(visible: boolean): number {
+  return visible ? 1 : 0;
 }
 
 function createGrainOverlay({
@@ -1513,6 +1712,8 @@ function createHigherLayerOcclusionPolygons(
 }
 
 function layerOccludesLowerGrain(layer: SquircleLayerConfig, hover: RenderHoverConfig | null): boolean {
+  if (!effectiveLayerVisible(layer, hover)) return false;
+
   const base = resolveVariant(layer.base, layer.stroke, layer.opacity);
   if (!hover?.enabled) return variantOccludesLowerGrain(base);
 
@@ -1633,7 +1834,7 @@ function intersectAtY(start: SquirclePoint, end: SquirclePoint, y: number): Squi
 
 function grainOverlayOpacity(variant: ResolvedVariant): number {
   if (!variantHasGrainSurface(variant)) return 0;
-  if (variant.material === "transparent") return GRAIN_OPACITY * variant.opacity.transparentFace;
+  if (variant.material === "glass") return GRAIN_OPACITY * variant.opacity.transparentFace;
   return GRAIN_OPACITY;
 }
 

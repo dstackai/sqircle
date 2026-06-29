@@ -87,7 +87,7 @@ bottom visible points in reverse order
 
 Rotate the sampled array if needed so the selected front-facing indices are emitted as one uninterrupted run. Do not emit separate left/right wall pieces; that makes the vertical sides drift away from the real silhouette tips.
 
-The complementary back-bottom edge is emitted as `ghost-hidden` and is only shown in wireframe mode.
+The complementary back-bottom edge is emitted as `ghost-hidden`. Wireframe mode shows it as the hidden guide; glass mode shows the same geometry more softly through the translucent faces.
 
 ## Generated React Geometry
 
@@ -95,7 +95,7 @@ The complementary back-bottom edge is emitted as `ghost-hidden` and is only show
 
 - `topPoints`: lit top-face polygon.
 - `wallPoints`: one continuous front side-wall polygon.
-- `hiddenPoints`: back/bottom edge used only in wireframe mode.
+- `hiddenPoints`: back/bottom edge used by wireframe and glass hidden guides.
 - `inlayPoints`: top-plane line-inlay squircle polygon.
 - `labelTransform`: `matrix(cosA, sinA, -cosA, sinA, cx, cy - h)` for live SVG text.
 - `topBounds` and `sideBounds`: gradient coordinate boxes.

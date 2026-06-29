@@ -3,16 +3,29 @@ export interface SquircleGradientStop {
   color: string;
 }
 
+export interface SquirclePaletteTheme {
+  top?: SquircleGradientStop[];
+  side?: SquircleGradientStop[];
+  wire?: SquircleGradientStop[];
+  textWire?: SquircleGradientStop[];
+  labelFill?: string;
+  topEdge?: string;
+  sideEdge?: string;
+  swatch?: [string, string];
+}
+
 export interface SquirclePalette {
   id: string;
   label: string;
   top: SquircleGradientStop[];
   side: SquircleGradientStop[];
+  wire?: SquircleGradientStop[];
   textWire: SquircleGradientStop[];
   labelFill: string;
   topEdge: string;
   sideEdge: string;
   swatch: [string, string];
+  dark?: SquirclePaletteTheme;
 }
 
 export const SQUIRCLE_PALETTES = {
@@ -203,6 +216,66 @@ export const SQUIRCLE_PALETTES = {
     topEdge: "#5a7bd0",
     sideEdge: "#17245e",
     swatch: ["#5c7fff", "#b8e7ff"]
+  },
+  "21": {
+    id: "21",
+    label: "21 Mono",
+    top: [
+      { offset: 0, color: "#d8dee6" },
+      { offset: 0.5, color: "#96a1ae" },
+      { offset: 1, color: "#475364" }
+    ],
+    side: [
+      { offset: 0, color: "#b0bac7" },
+      { offset: 0.52, color: "#728093" },
+      { offset: 1, color: "#344153" }
+    ],
+    wire: [
+      { offset: 0, color: "#bac3cf" },
+      { offset: 0.24, color: "#8794a4" },
+      { offset: 0.5, color: "#526175" },
+      { offset: 0.76, color: "#3b4a5e" },
+      { offset: 1, color: "#283648" }
+    ],
+    textWire: [
+      { offset: 0, color: "#bac3cf" },
+      { offset: 0.32, color: "#8794a4" },
+      { offset: 0.66, color: "#526175" },
+      { offset: 1, color: "#283648" }
+    ],
+    labelFill: "#f8fafc",
+    topEdge: "#8793a2",
+    sideEdge: "#2d3848",
+    swatch: ["#d8dee6", "#475364"],
+    dark: {
+      top: [
+        { offset: 0, color: "#f8fbff" },
+        { offset: 0.5, color: "#b9c5d2" },
+        { offset: 1, color: "#647385" }
+      ],
+      side: [
+        { offset: 0, color: "#d6dee8" },
+        { offset: 0.52, color: "#929faf" },
+        { offset: 1, color: "#4a586b" }
+      ],
+      wire: [
+        { offset: 0, color: "#f8fbff" },
+        { offset: 0.24, color: "#b8c4d1" },
+        { offset: 0.5, color: "#75889f" },
+        { offset: 0.76, color: "#c7d2df" },
+        { offset: 1, color: "#e3ebf3" }
+      ],
+      textWire: [
+        { offset: 0, color: "#f8fbff" },
+        { offset: 0.32, color: "#b8c4d1" },
+        { offset: 0.66, color: "#75889f" },
+        { offset: 1, color: "#e3ebf3" }
+      ],
+      labelFill: "#16202c",
+      topEdge: "#a6b2c0",
+      sideEdge: "#435164",
+      swatch: ["#f8fbff", "#647385"]
+    }
   }
 } satisfies Record<string, SquirclePalette>;
 
@@ -217,4 +290,10 @@ export function getSquirclePalette(paletteId: string | undefined): SquirclePalet
 
 export function isSquirclePaletteId(paletteId: string | undefined): paletteId is SquirclePaletteId {
   return Boolean(paletteId && paletteId in SQUIRCLE_PALETTES);
+}
+
+export function getSquirclePaletteSwatch(paletteId: string | undefined, theme: "light" | "dark" = "light"): [string, string] {
+  const palette = getSquirclePalette(paletteId);
+  if (theme === "dark") return palette.dark?.swatch ?? palette.swatch;
+  return palette.swatch;
 }

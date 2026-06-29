@@ -33,12 +33,12 @@ const layer: SquircleLayerConfig = {
 | Solid Grain | `{ material: "solid", grain: true }` |
 | Solid Metal Grain Text + Dashed Line | `{ material: "solid", effect: "metal", grain: true, text: "GPU", textStyle: "solid", line: "dashed" }` |
 | Solid Mesh Grain Text Outline + Solid Line | `{ material: "solid", effect: "mesh", grain: true, text: "{}", textStyle: "wireframe", line: "solid" }` |
-| Transparent | `{ material: "transparent" }` |
-| Transparent Text | `{ material: "transparent", text: "GPU", textStyle: "solid" }` |
-| Transparent Text Outline + Dotted Line | `{ material: "transparent", text: "GPU", textStyle: "wireframe", line: "dotted" }` |
-| Transparent Grain | `{ material: "transparent", grain: true }` |
-| Transparent Metal Grain Text + Dashed Line | `{ material: "transparent", effect: "metal", grain: true, text: "AI", textStyle: "solid", line: "dashed" }` |
-| Transparent Mesh Grain Text Outline + Solid Line | `{ material: "transparent", effect: "mesh", grain: true, text: "CUDA", textStyle: "wireframe", line: "solid" }` |
+| Glass | `{ material: "glass" }` |
+| Glass Text | `{ material: "glass", text: "GPU", textStyle: "solid" }` |
+| Glass Text Outline + Dotted Line | `{ material: "glass", text: "GPU", textStyle: "wireframe", line: "dotted" }` |
+| Glass Grain | `{ material: "glass", grain: true }` |
+| Glass Metal Grain Text + Dashed Line | `{ material: "glass", effect: "metal", grain: true, text: "AI", textStyle: "solid", line: "dashed" }` |
+| Glass Mesh Grain Text Outline + Solid Line | `{ material: "glass", effect: "mesh", grain: true, text: "CUDA", textStyle: "wireframe", line: "solid" }` |
 | Wireframe | `{ material: "wireframe" }` |
 | Wireframe Text Filled | `{ material: "wireframe", text: "GPU", textStyle: "solid" }` |
 | Wireframe Text Outline | `{ material: "wireframe", text: "GPU", textStyle: "wireframe" }` |
@@ -48,9 +48,11 @@ The local `index.html` example renders these through `createSingleStatePresets()
 
 ## Paint Rules
 
-- Solid and transparent text + line states use palette automatic annotation paint by default.
-- Solid/transparent `textColor` and `lineColor` may be `auto`, `white`, or `black`.
-- Solid and transparent states may use `effect: "off" | "metal" | "mesh"` and optional `grain: true`.
+- Solid text + line states use palette automatic annotation paint by default.
+- Glass text + line states use contrast-selected automatic annotation paint by default.
+- Solid/glass `textColor` and `lineColor` may be `auto`, `white`, or `black`.
+- Solid and glass states may use `effect: "off" | "metal" | "mesh"` and optional `grain: true`.
+- Glass states render lower-alpha faces plus visible hidden/back guides and wire-gradient rims, so they should read as glass-like prisms rather than faded solid surfaces. `material: "transparent"` is accepted as a deprecated alias for older configs.
 - Wireframe line always uses the wire gradient.
 - Wireframe `textStyle: "wireframe"` uses the label-local text wire gradient.
 - Wireframe `textStyle: "solid"` uses the text surface gradient at full opacity.

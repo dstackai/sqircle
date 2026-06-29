@@ -331,6 +331,7 @@ select {
   color: var(--editor-active-text);
 }
 
+.material-pill-glass,
 .material-pill-transparent {
   border-color: color-mix(in srgb, var(--editor-accent-2) 32%, var(--editor-line));
   color: color-mix(in srgb, var(--editor-active-text) 72%, var(--editor-accent-2));

@@ -1,4 +1,12 @@
-import type { SquircleGeometryConfig, SquircleLayerConfig, SquircleTheme, SquircleVariantConfig } from "./types";
+import type {
+  SquircleGeometryConfig,
+  SquircleLayerConfig,
+  SquircleLayerHoverConfig,
+  SquircleLayerHoverState,
+  SquircleMaterial,
+  SquircleTheme,
+  SquircleVariantConfig
+} from "./types";
 
 export interface SquircleReactCodeOptions {
   layers: SquircleLayerConfig[];
@@ -63,17 +71,29 @@ function layerForReactCode(layer: SquircleLayerConfig): SquircleLayerConfig {
   return pruneUndefined({
     ...layer,
     base: variantForReactCode(layer.base),
-    hover: layer.hover && typeof layer.hover !== "function" ? variantForReactCode(layer.hover) : undefined
+    hover: hoverForReactCode(layer.hover)
   });
 }
 
-function variantForReactCode(variant: SquircleVariantConfig): SquircleVariantConfig {
+function hoverForReactCode(hover: SquircleLayerHoverConfig | undefined): SquircleLayerHoverState | undefined {
+  if (!hover || typeof hover === "function") return undefined;
+  return variantForReactCode(hover);
+}
+
+function variantForReactCode<T extends SquircleVariantConfig>(variant: T): T {
   const text = textForExport(variant.text);
+  const material = materialForExport(variant.material);
 
   return pruneUndefined({
     ...variant,
+    material,
     text
   });
+}
+
+function materialForExport(material: SquircleMaterial | undefined): SquircleMaterial | undefined {
+  if (material === "transparent") return "glass";
+  return material;
 }
 
 function textForExport(text: SquircleVariantConfig["text"]): SquircleVariantConfig["text"] | undefined {

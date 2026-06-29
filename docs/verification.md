@@ -33,11 +33,11 @@ Open the Vite dev server and inspect:
 Expected results:
 
 - No page renders all-black squircles.
-- Solid and transparent `metal` and `mesh` effects are clipped to the top face and animate without moving layer geometry.
-- Solid and transparent `grain: true` variants show subtle multiply-blended grain only inside the top face, not across the scene background.
-- Solid and transparent `metal` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
+- Solid and glass `metal` and `mesh` effects are clipped to the top face and animate without moving layer geometry.
+- Solid and glass `grain: true` variants show subtle multiply-blended grain only inside the top face, not across the scene background.
+- Solid and glass `metal` effects look projected onto the tilted top plane; no individual circular blob edges are visible in a paused frame.
 - Chrome/Firefox `metal` uses `sq-top-effect-metal-blur`; Safari/iOS `metal` uses `sq-top-effect-metal-soft` and has no animated SVG blur filters.
-- Solid and transparent `mesh` effects look like a smooth four-corner bilinear gradient; no hotspots, blobs, waves, or noise are visible.
+- Solid and glass `mesh` effects look like a smooth four-corner bilinear gradient; no hotspots, blobs, waves, or noise are visible.
 - Geometry stays fixed when selection or hover changes.
 - Camera level affects the whole scene and serializes as `geometry.angleDegrees`.
 - Radius, height, and line-size edits affect only the selected layer and serialize into that layer's `geometry` object.

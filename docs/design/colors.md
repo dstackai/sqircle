@@ -6,7 +6,7 @@ This file is the palette contract for variants, gradients, text labels, and edge
 
 Colors are defined in `src/squircle/palettes.ts` and consumed by `SquircleScene`. The root HTML files are Vite shells and do not own gradient stops. Keep these synchronized:
 
-1. `SQUIRCLE_PALETTES`: alpha palettes `13..20`.
+1. `SQUIRCLE_PALETTES`: palettes `13..21`.
 2. Renderer docs in `README.md` and `docs/react/README.md`.
 3. This design file.
 
@@ -36,8 +36,22 @@ The side gradient intentionally starts at `y=0`, not at the wall's visible `y=14
 | `18 Alpha` | `0 #f8fdff`, `0.42 #b8e7ff`, `1 #006ce0` | `0 #86d4f3`, `0.5 #5da6dd`, `1 #005dbc` | `#064272` | `#4f94c0` | `#064272` |
 | `19 Alpha` | `0 #e6fff9`, `0.42 #42b4ff`, `1 #8575ff` | `0 #1ea9eb`, `0.5 #4f8cee`, `1 #7866e8` | `#12306f` | `#6470d8` | `#12306f` |
 | `20 Alpha` | `0 #eef3ff`, `0.38 #5c7fff`, `0.7 #0099ff`, `1 #b8e7ff` | `0 #536fe8`, `0.52 #168fe8`, `1 #8fd2ee` | `#17245e` | `#5a7bd0` | `#17245e` |
+| `21 Mono` | `0 #d8dee6`, `0.5 #96a1ae`, `1 #475364` | `0 #b0bac7`, `0.52 #728093`, `1 #344153` | `#f8fafc` | `#8793a2` | `#2d3848` |
 
 The text surface gradient repeats the matching `top-*` stops with label-local coordinates. It is used when a wireframe squircle has `textStyle: "solid"`, so filled text reads as top surface material instead of pale wire line-art.
+
+Palette `21 Mono` is adaptive. In light theme it renders as a graphite matte neutral surface with the table values above. In dark theme its `dark` override renders as a light matte neutral surface:
+
+- Dark-theme top: `0 #f8fbff`, `0.5 #b9c5d2`, `1 #647385`
+- Dark-theme side: `0 #d6dee8`, `0.52 #929faf`, `1 #4a586b`
+- Dark-theme label fill: `#16202c`
+- Dark-theme edges: top `#a6b2c0`, side `#435164`
+
+`21 Mono` defines dedicated wire gradients for both themes. Light-theme wire is `0 #bac3cf`, `0.24 #8794a4`, `0.5 #526175`, `0.76 #3b4a5e`, `1 #283648`. Dark-theme wire is `0 #f8fbff`, `0.24 #b8c4d1`, `0.5 #75889f`, `0.76 #c7d2df`, `1 #e3ebf3`.
+
+The neutral palette is balanced with sampled contrast rather than a single eyeballed gray. Against the light editor/page stage it keeps the filled top face near the stronger alpha palettes while the wire gradient is intentionally a little stronger for thin-stroke legibility. Against the dark stage it uses the `dark` override so the filled face and wireframe stay in the alpha contrast band instead of disappearing or turning into a flat white chip. `effect: "off"` must remain matte: `21 Mono` uses only smooth top-left to bottom-right stops, and any metal-like movement or specular behavior must come from `effect: "metal"`.
+
+Other palettes currently omit `dark` and therefore use the same top, side, wire, text, edge, and swatch colors in both themes, preserving the original behavior.
 
 ## CSS Variable Contract
 
@@ -55,7 +69,7 @@ Legacy static snapshots used CSS variables such as `--top-fill` and `--side-fill
 }
 ```
 
-Every `.v13..v20` class must define the same core variables for variant cards:
+Every `.v13..v21` class must define the same core variables for variant cards:
 
 ```css
 .v15 {
@@ -78,13 +92,14 @@ Do not implement hover color with filters, opacity hacks, or untracked ad hoc co
 
 ## Annotation Auto And Overrides
 
-React layers with `textColor: "auto"` and `lineColor: "auto"` use the palette's automatic annotation colors. Solid and transparent top-plane annotations use the palette `labelFill`. This applies to both filled text and solid line inlays, so default text + line states keep one automatic annotation color.
+React layers with `textColor: "auto"` and `lineColor: "auto"` use material-aware automatic annotation colors. Solid top-plane annotations use the palette `labelFill`. Glass annotations choose black or white by contrast against the translucent top face over the current theme stage. Wireframe annotations use wire gradients.
 
 - Darker top gradients may use a near-white label. Current example: `15 Alpha` uses `#f7fbff`.
+- Adaptive neutral palettes may change label fill by theme. Current example: `21 Mono` uses `#f8fafc` in light theme and `#16202c` in dark theme.
 - Lighter top gradients should use dark in-family annotation colors.
 - Do not add a second outline copy for automatic annotation paint.
 
-Wireframe text labels ignore fixed label paint and use gradient wire paint:
+Wireframe text labels ignore fixed label paint and use theme-resolved gradient wire paint:
 
 ```css
 fill: none !important;
@@ -92,19 +107,19 @@ stroke: url("#...text-wire...");
 stroke-width: var(--label-wire-width);
 ```
 
-Wireframe inlays use the top-face gradient.
+Wireframe inlays use the theme-resolved palette wire gradient, falling back to the top-face gradient for palettes that do not define `wire`.
 
-In React, `textStyle: "wireframe"` outlines the same live SVG text element used by filled mode. On solid/transparent material, outline paint comes from `textColor`; `auto` resolves to `labelFill`, matching filled text and solid line. On wireframe material, outline paint comes from label-local `textWire` gradients; do not sample the full-face top ramp there, and do not replace the text with single-stroke lettering.
+In React, `textStyle: "wireframe"` outlines the same live SVG text element used by filled mode. On solid/glass material, outline paint comes from `textColor`; `auto` resolves to `labelFill` on solid and contrast-selected paint on glass. On wireframe material, outline paint comes from label-local `textWire` gradients; do not sample the full-face top ramp there, and do not replace the text with single-stroke lettering.
 
 `SquircleVariantConfig` supports explicit annotation overrides:
 
 | Field | Values | Paint |
 | --- | --- | --- |
-| `textColor` | `auto`, `white`, `black` | Filled or outlined text paint for solid/transparent material |
+| `textColor` | `auto`, `white`, `black` | Filled or outlined text paint for solid/glass material |
 | `textStyle` | `solid`, `wireframe` | Filled or outlined text label |
-| `lineColor` | `auto`, `white`, `black` | Line stroke for solid/transparent material |
+| `lineColor` | `auto`, `white`, `black` | Line stroke for solid/glass material |
 
-Use `auto` when the annotation should follow the palette. Use `white` or `black` only when the user deliberately wants fixed annotation paint. On wireframe material, line always uses the top gradient; text uses the text surface gradient at full opacity when `textStyle` is `solid` and the text wire gradient when `textStyle` is `wireframe`.
+Use `auto` when the annotation should follow the palette. Use `white` or `black` only when the user deliberately wants fixed annotation paint. On wireframe material, line always uses the theme-resolved palette wire gradient; text uses the text surface gradient at full opacity when `textStyle` is `solid` and the theme-resolved text wire gradient when `textStyle` is `wireframe`.
 
 ## Edge Colors
 
@@ -119,20 +134,20 @@ Edge colors must be darker members of the same family as the face gradient. Neve
 
 ## Wireframe Colors
 
-Wireframe mode and `.single-wire` use the top gradient for all visible line art:
+Wireframe mode and `.single-wire` use the palette wire gradient for prism and line art. In `theme="dark"`, palette `dark.wire` and `dark.textWire` are used when present. If `dark.wire` is omitted, it falls back to `wire`; if `wire` is omitted, it falls back to the resolved top gradient:
 
-- Prism strokes: `var(--top-fill)`
-- Hidden back edge: `var(--top-fill)`
-- Wire inlay: `var(--top-fill)`
-- Wire text: `var(--top-fill)`
+- Prism strokes: `dark.wire`, `wire`, or resolved top gradient fallback
+- Hidden back edge: `dark.wire`, `wire`, or resolved top gradient fallback
+- Wire inlay: `dark.wire`, `wire`, or resolved top gradient fallback
+- Wire text outline: `dark.textWire` or label-local `textWire` gradient
 
-This is intentional: light does not interact with a wireframe surface, so top and lower curves should match instead of using separate side lighting.
+This is intentional: light does not interact with a wireframe surface, so top and lower curves should match instead of using separate side lighting. Palette `21 Mono` needs a theme-specific `dark` override because its light-theme graphite surface and wire strokes cannot maintain the same contrast on dark page backgrounds.
 
 ## Adding A Variant
 
 When adding a new palette:
 
 1. Add it to `SQUIRCLE_PALETTES`.
-2. Include top, side, text-wire, label fill, top edge, side edge, and swatch values.
+2. Include top, side, text-wire, label fill, top edge, side edge, and swatch values. Add `wire` when the top gradient is not readable enough for standalone wireframes. Add a `dark` override when the palette needs different top, side, label, edge, wire, text-wire, or swatch values in `theme="dark"`.
 3. Update the palette table above.
 4. Render the examples and constructor controls.

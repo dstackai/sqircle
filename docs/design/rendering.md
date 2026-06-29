@@ -9,6 +9,7 @@ For exact variant stops and CSS color variables, see [colors.md](./colors.md).
 All face gradients use `gradientUnits="userSpaceOnUse"` and coordinates derived from generated points:
 
 - Top gradient bbox: `x1 = 0`, `y1 = 0`, `x2 = 800`, `y2 = 291.18`
+- Wire gradient bbox: same as top gradient; uses the theme-resolved palette wire stops. In light theme this is `wire` or top fallback; in dark theme this is `dark.wire`, `wire`, or resolved top fallback.
 - Text surface gradient: `x1 = -425.63`, `y1 = -0.1`, `x2 = 425.6`, `y2 = 0.07`, with the same stops as the matching top gradient
 - Side gradient bbox: `x1 = 0`, `y1 = 0`, `x2 = 800`, `y2 = 301.18`, computed from top face plus side wall
 
@@ -16,11 +17,13 @@ Top gradients span only the top face. Side gradients span the full top-plus-wall
 
 React uses `text-surface-*` gradients to remap the top face stops into the label's local projected plane. These gradients are used for `textStyle: "solid"` on wireframe material, where filled text should read as top-surface paint rather than wire stroke color.
 
-Wireframe mode uses the top gradient as the stroke gradient so upper and lower curves match. This intentionally avoids fake lighting on wireframes.
+Wireframe mode uses the theme-resolved palette wire gradient for prism strokes and line inlays. Palettes without a dedicated `wire` gradient fall back to the resolved top gradient, preserving the original alpha-palette behavior. Adaptive palettes such as `21 Mono` can define `dark.wire` and `dark.textWire`, because the graphite wires needed on light backgrounds are not readable on dark backgrounds. This intentionally avoids fake side lighting on wireframes while preserving contrast in both themes.
+
+`effect: "off"` must stay matte. Palette gradients may provide gentle top-left to bottom-right lighting, but they must not alternate sharp light/dark stops or mimic `metal`. Metal-like movement, blobs, or high-contrast specular bands belong only to `effect: "metal"`.
 
 ## Filled Surface Effects
 
-`SquircleVariantConfig.effect` changes only the top-face rendering for filled materials: `material: "solid"` and `material: "transparent"`. It is ignored by `wireframe`.
+`SquircleVariantConfig.effect` changes only the top-face rendering for filled materials: `material: "solid"` and `material: "glass"`. It is ignored by `wireframe`.
 
 | Effect | Rendering |
 | --- | --- |
@@ -28,7 +31,7 @@ Wireframe mode uses the top gradient as the stroke gradient so upper and lower c
 | `metal` | A full-resolution top-face `clipPath` containing an isometrically projected base color field plus moving soft color blobs. Chrome/Firefox use the original SVG Gaussian-blur backend; Safari/iOS use a radial-gradient blob backend to avoid per-frame SVG filter rasterization. No displacement map is used. |
 | `mesh` | A full-resolution top-face `clipPath` containing a projected four-corner bilinear gradient. The four corner colors are sampled from `palette.top` and slowly exchange along diagonal pairs. No blobs, hotspots, noise, turbulence, or internal wave figures are used. |
 
-The moving effects are driven by a shared, throttled `requestAnimationFrame` clock inside `SquircleScene`. The clock mutates SVG attributes through refs instead of setting React state per frame, pauses when `document.hidden`, and scenes unsubscribe while offscreen through `IntersectionObserver`. Motion is enabled only when a visible base or hover variant resolves to a solid/transparent `metal` or `mesh` state.
+The moving effects are driven by a shared, throttled `requestAnimationFrame` clock inside `SquircleScene`. The clock mutates SVG attributes through refs instead of setting React state per frame, pauses when `document.hidden`, and scenes unsubscribe while offscreen through `IntersectionObserver`. Motion is enabled only when a visible base or hover variant resolves to a solid/glass `metal` or `mesh` state.
 
 Effect color layers are authored in the flat top-face local coordinate system, not in screen coordinates. Local `(0, 0)` is the center of the raw superellipse, and local `a` is `geometry.config.halfSize`. The whole color field is then wrapped in the same isometric matrix used by labels:
 
@@ -79,14 +82,26 @@ Effect invariants:
 - Mesh must stay a four-corner bilinear blend. Do not add radial gradients, spotlights, noise, turbulence, or wave structure.
 - Mesh corner colors must be sampled from `palette.top`, and the four sampled levels must remain conserved during animation.
 - Mesh animation should update existing gradient stop colors through refs, not trigger React scene re-renders per frame.
-- Transparent material applies `transparentFace` opacity to the animated color field so effects do not make the top face fully opaque.
+- Glass material applies `transparentFace` opacity to the animated color field so effects do not make the top face fully opaque.
 - Annotations render after the effect, so text and line stay readable and stay glued to the top plane.
 - Side wall geometry, layer offsets, hover transitions, and annotation transforms do not change when the effect changes.
-- Effect colors are derived from the selected alpha palette's top and side stops.
+- Effect colors are derived from the selected palette's top and side stops.
+
+## Glass Material
+
+`material: "glass"` is a glass-like prism, not a faded solid snapshot. It still uses real SVG alpha, but it adds shape cues so the prism reads as see-through. `material: "transparent"` is a deprecated input alias normalized to `glass`:
+
+- Top face fill uses `transparentFace` opacity.
+- Side wall fill uses a softer opacity derived from `transparentFace`, so the wall does not look like a dense painted slab.
+- Top and side edges use the theme-resolved palette wire gradient instead of solid face edge colors. Glass intentionally keeps a strong refractive rim so the translucent prism remains legible.
+- The generated `hiddenPoints` back/bottom run is drawn behind the translucent faces, matching the wireframe hidden guide at a lower opacity.
+- Text and line annotations use `transparentAnnotation` opacity. When their color is `auto`, the renderer picks black or white by contrast against the translucent top face over the current theme stage.
+
+This lets lower layers and the back silhouette show through while preserving the same top/side geometry and hover transition behavior as solid material. Do not simulate transparency by only lightening palette colors; that breaks overlap and makes the material read as matte paint.
 
 ## Surface Grain
 
-`SquircleVariantConfig.grain` is independent of `effect`. It is honored only by `material: "solid"` and `material: "transparent"` and can sit over `off`, `metal`, or `mesh`.
+`SquircleVariantConfig.grain` is independent of `effect`. It is honored only by `material: "solid"` and `material: "glass"` and can sit over `off`, `metal`, or `mesh`.
 
 The grain is not drawn inside the prism geometry. `SquircleScene` creates a sibling `<svg class="sq-grain-overlay">` above the main scene, computes one overlay rectangle per grained top face, and clips each rectangle to the generated `topPoints` polygon converted into `objectBoundingBox` coordinates. This keeps grain off the page background and off the side wall.
 
@@ -115,14 +130,14 @@ The overlay filter uses:
 </feComponentTransfer>
 ```
 
-CSS applies `mix-blend-mode: multiply` to `.sq-grain-overlay`. The `-0.22` intercept recenters the grayscale transfer for multiply, so the overlay reads as subtle dark grit instead of bright sparkle. Transparent material multiplies the grain opacity by `transparentFace` so the texture follows the material opacity.
+CSS applies `mix-blend-mode: multiply` to `.sq-grain-overlay`. The `-0.22` intercept recenters the grayscale transfer for multiply, so the overlay reads as subtle dark grit instead of bright sparkle. Glass material multiplies the grain opacity by `transparentFace` so the texture follows the material opacity.
 
 Grain invariants:
 
 - The overlay must be `pointer-events: none`.
 - When grain is available, the scene root wraps an internal frame; the frame, not external layout padding, owns the main SVG and grain overlay alignment.
 - Each overlay clip must come from generated top points plus the layer offset, not from hand-written coordinates.
-- Lower-layer grain must be masked against later filled layers so it never appears on top of a higher solid or transparent prism.
+- Lower-layer grain must be masked against later filled layers so it never appears on top of a higher solid or glass prism.
 - Grain hover changes should crossfade opacity with the same `--sq-transition-ms` as base/hover variants.
 - Do not use grain to add texture to wireframe material.
 
@@ -146,6 +161,8 @@ Each prism definition follows this order:
 
 The top face is drawn after the side wall, so it hides the back half of the extrusion without masks or z-buffering.
 
+Glass prism draw order inserts the hidden/back guide before the side and top faces. Because the faces are translucent, that back run remains visible through the material.
+
 ## Line Inlay
 
 The middle-layer line squircle is generated from the same superellipse at `0.6 * a` and projected at `z = h`, so it lies on the top plane.
@@ -157,9 +174,9 @@ The middle-layer line squircle is generated from the same superellipse at `0.6 *
 - `line: "dashed"`: rounded dashed stroke.
 - `line: false`: no inlay.
 
-By default, solid and transparent inlays use the palette label color, the same automatic annotation paint as filled text. Wireframe inlays use the top-face gradient, matching the prism wires.
+By default, solid inlays use the palette label color, the same automatic annotation paint as filled text. Glass inlays use contrast-selected auto paint so they stay readable over glass and whatever shows through it. Wireframe inlays use the theme-resolved palette wire gradient, matching the prism wires.
 
-`lineColor: "auto"` keeps the material default. `lineColor: "white"` and `lineColor: "black"` intentionally use fixed stroke colors on solid/transparent material. Wireframe material ignores fixed line color and uses the wire gradient.
+`lineColor: "auto"` keeps the material default. `lineColor: "white"` and `lineColor: "black"` intentionally use fixed stroke colors on solid/glass material. Wireframe material ignores fixed line color and uses the wire gradient.
 
 ## Label Source
 
@@ -204,8 +221,9 @@ The transform never changes between solid and wireframe modes; only paint change
 
 Solid text style:
 
-- The label uses palette label paint when `textColor` is `auto`.
-- Solid/transparent line uses the same palette label paint by default.
+- The label uses palette label paint when `textColor` is `auto` on solid material.
+- Glass text and line use contrast-selected black/white paint when their color is `auto`.
+- Solid line uses the same palette label paint by default.
 - `15 Alpha` uses `#f7fbff` because its top gradient is dark.
 - Lighter variants use dark in-family label fills.
 
@@ -213,14 +231,14 @@ Wireframe text style:
 
 - `textStyle: "wireframe"` uses the same live text element as filled mode.
 - It sets `fill: none` and uses a stroke.
-- On solid/transparent material, outline paint comes from `textColor`; `auto` resolves to the palette label paint, matching filled text and solid line.
-- On wireframe material, outline paint resolves to the label-local `textWire` gradient.
-- Wireframe line uses the top-face gradient so inlays match prism wires.
+- On solid/glass material, outline paint comes from `textColor`; `auto` resolves to palette label paint on solid and contrast-selected paint on glass.
+- On wireframe material, outline paint resolves to the theme-resolved label-local `textWire` gradient.
+- Wireframe line uses the theme-resolved palette wire gradient so inlays match prism wires.
 - It must remain an outline around the font figures, not a single-stroke lettering replacement.
 - Keep the outline stroke thin relative to text size. The default `labelWire` is `1.1` at `textSize: 62`, safely below the ratio where counters start merging.
 
-Do not sample the full-face top ramp directly for the text outline on wireframe material; it is too large for the label geometry and makes the color read wrong. Use one text element for all text styles. Use `textColor` for solid/transparent outline paint and the label-local wire gradient for wireframe-material outline paint.
+Do not sample the full-face top ramp directly for the text outline on wireframe material; it is too large for the label geometry and makes the color read wrong. Use one text element for all text styles. Use `textColor` for solid/glass outline paint and the label-local wire gradient for wireframe-material outline paint.
 
-Do not introduce `textStyle: "transparent"` as a third paint control. On wireframe material, `textStyle: "solid"` renders a fully opaque filled label using the text surface gradient, and `textStyle: "wireframe"` renders an outlined label using the text wire gradient.
+Do not introduce a glass-specific third text style. On wireframe material, `textStyle: "solid"` renders a fully opaque filled label using the text surface gradient, and `textStyle: "wireframe"` renders an outlined label using the text wire gradient.
 
 Do not build filled letters from `<rect>`, `<line>`, or separate stem/bowl paths. Do not add a second label copy and do not replace the text with monoline lettering for outline mode.

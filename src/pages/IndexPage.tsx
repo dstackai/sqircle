@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { SquircleScene, SQUIRCLE_PALETTES } from "../squircle";
+import { SquircleScene, SQUIRCLE_PALETTES, getSquirclePaletteSwatch } from "../squircle";
 import type { SquircleTheme } from "../squircle";
 import { PageShell } from "./PageShell";
 import { PAGE_PALETTES, createHeroLayers, createSingleStatePresets } from "./exampleData";
@@ -33,18 +33,22 @@ function IndexPage() {
         <aside className="sq-control-panel">
           <h2>Palette</h2>
           <div className="sq-palette-grid">
-            {PAGE_PALETTES.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={paletteId === id ? "sq-swatch is-active" : "sq-swatch"}
-                aria-pressed={paletteId === id}
-                onClick={() => setPaletteId(id)}
-              >
-                <span style={{ background: `linear-gradient(135deg, ${SQUIRCLE_PALETTES[id].swatch[0]}, ${SQUIRCLE_PALETTES[id].swatch[1]})` }} />
-                {SQUIRCLE_PALETTES[id].label}
-              </button>
-            ))}
+            {PAGE_PALETTES.map((id) => {
+              const swatch = getSquirclePaletteSwatch(id, theme);
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={paletteId === id ? "sq-swatch is-active" : "sq-swatch"}
+                  aria-pressed={paletteId === id}
+                  onClick={() => setPaletteId(id)}
+                >
+                  <span style={{ background: `linear-gradient(135deg, ${swatch[0]}, ${swatch[1]})` }} />
+                  {SQUIRCLE_PALETTES[id].label}
+                </button>
+              );
+            })}
           </div>
         </aside>
       </section>

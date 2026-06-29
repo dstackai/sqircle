@@ -4,7 +4,7 @@ import { SQUIRCLE_PALETTE_IDS, reflowLayerOffsets } from "../squircle";
 export const PAGE_LAYER_GAP = 88;
 export const PAGE_PALETTES = SQUIRCLE_PALETTE_IDS;
 
-const materials: SquircleMaterial[] = ["wireframe", "solid", "transparent"];
+const materials: SquircleMaterial[] = ["wireframe", "solid", "glass"];
 const effects = ["off", "metal", "mesh"] as const satisfies readonly SquircleEffect[];
 const labels = ["GPU", "CUDA", "AI", "{}"];
 
@@ -24,7 +24,7 @@ export function createHeroLayers(paletteId = "15"): SquircleLayerConfig[] {
     },
     {
       id: "middle",
-      base: { material: "transparent", paletteId: "18" },
+      base: { material: "glass", paletteId: "18" },
       hover: { material: "solid", paletteId }
     },
     {
@@ -45,12 +45,12 @@ export function createSingleStatePresets(paletteId: string): CompositionPreset[]
     { material: "solid", paletteId, grain: true },
     { material: "solid", paletteId, effect: "metal", grain: true, text: "GPU", textStyle: "solid", line: "dashed" },
     { material: "solid", paletteId, effect: "mesh", grain: true, text: "{}", textStyle: "wireframe", line: "solid" },
-    { material: "transparent", paletteId },
-    { material: "transparent", paletteId, text: "GPU", textStyle: "solid" },
-    { material: "transparent", paletteId, text: "GPU", textStyle: "wireframe", line: "dotted" },
-    { material: "transparent", paletteId, grain: true },
-    { material: "transparent", paletteId, effect: "metal", grain: true, text: "AI", textStyle: "solid", line: "dashed" },
-    { material: "transparent", paletteId, effect: "mesh", grain: true, text: "CUDA", textStyle: "wireframe", line: "solid" },
+    { material: "glass", paletteId },
+    { material: "glass", paletteId, text: "GPU", textStyle: "solid" },
+    { material: "glass", paletteId, text: "GPU", textStyle: "wireframe", line: "dotted" },
+    { material: "glass", paletteId, grain: true },
+    { material: "glass", paletteId, effect: "metal", grain: true, text: "AI", textStyle: "solid", line: "dashed" },
+    { material: "glass", paletteId, effect: "mesh", grain: true, text: "CUDA", textStyle: "wireframe", line: "solid" },
     { material: "wireframe", paletteId },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "solid" },
     { material: "wireframe", paletteId, text: "GPU", textStyle: "wireframe" },
@@ -195,7 +195,7 @@ function lineFor(index: number, layerIndex: number): SquircleLineStyle | false {
 }
 
 function materialSupportsEffect(material: SquircleMaterial | undefined): boolean {
-  return material === "solid" || material === "transparent";
+  return material === "solid" || material === "glass" || material === "transparent";
 }
 
 function titleCase(value: string): string {

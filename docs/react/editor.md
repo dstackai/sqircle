@@ -104,7 +104,7 @@ Supported renderer API fields that remain intentionally code-only in the editor:
 - advanced shared geometry beyond Camera level and per-layer Radius/Height/Line size: `center`, `width`, `viewBoxHeight`, `samples`, `halfSize`
 - manual layer offsets and scene fitting
 
-The `Effect` segmented control appears when the edited state has `material: "solid"` or `material: "transparent"`. The `Grain` feature switch stays visible for discoverability, but is disabled for `wireframe`. `Effect` writes `effect: "off" | "metal" | "mesh"`; `Grain` writes `grain: true | false`. The renderer ignores both fields for `wireframe`.
+The `Effect` segmented control appears when the edited state has `material: "solid"` or `material: "glass"`. The `Grain` feature switch stays visible for discoverability, but is disabled for `wireframe`. `Effect` writes `effect: "off" | "metal" | "mesh"`; `Grain` writes `grain: true | false`. The renderer ignores both fields for `wireframe`.
 
 ## Annotation Rules
 
@@ -116,7 +116,7 @@ Radius, Height, and Line size live in the selected-layer Geometry section, colla
 
 Camera level lives in the left-panel Scene Camera section, collapsed by default. It maps to scene `geometry.angleDegrees`, so it changes the projection for the whole composition. Lower values are more side-on; higher values show more of the top face.
 
-The editor's Line stroke slider writes both `stroke.line` and `stroke.wireLine`, so the same control affects solid/transparent line inlays and wireframe line inlays. In hand-authored code, those two fields remain separate API options.
+The editor's Line stroke slider writes both `stroke.line` and `stroke.wireLine`, so the same control affects solid/glass line inlays and wireframe line inlays. In hand-authored code, those two fields remain separate API options.
 
 ## Code Export
 

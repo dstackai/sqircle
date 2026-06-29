@@ -1,4 +1,4 @@
-import type { SquircleGeometryConfig, SquircleLayerConfig, SquirclePoint } from "./types";
+import type { SquircleGeometryConfig, SquircleLayerConfig, SquircleMaterial, SquirclePoint } from "./types";
 
 export const DEFAULT_GEOMETRY = {
   width: 800,
@@ -113,7 +113,7 @@ export function createSquircleLayers(
   options: {
     gap?: number;
     paletteId?: string;
-    material?: "solid" | "transparent" | "wireframe";
+    material?: SquircleMaterial;
   } = {}
 ): SquircleLayerConfig[] {
   const gap = options.gap ?? 88;
